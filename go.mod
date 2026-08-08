@@ -27,6 +27,7 @@ require (
 	cloud.google.com/go/monitoring v1.29.0
 	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/SAP/go-hdb v1.16.12
+	github.com/aerospike/aerospike-client-go/v8 v8.8.0
 	github.com/amsokol/ignite-go-client v0.12.2
 	github.com/armon/go-radix v1.0.0
 	github.com/caddyserver/certmagic v0.25.4
@@ -47,6 +48,7 @@ require (
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-metrics-stackdriver v0.2.0
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/cap v0.13.0
 	github.com/hashicorp/cli v1.1.7
 	github.com/hashicorp/errwrap v1.1.0
@@ -183,7 +185,7 @@ require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/DataDog/datadog-go v4.8.3+incompatible // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
+	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/TritonDataCenter/triton-go/v2 v2.0.0-pre4 // indirect
@@ -256,7 +258,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.17 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/gophercloud/gophercloud v0.1.0 // indirect
@@ -340,12 +341,14 @@ require (
 	github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/vmware/govmomi v0.18.0 // indirect
+	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/yeqown/reedsolomon v1.0.0 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
+	github.com/yuin/gopher-lua v1.1.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zclconf/go-cty v1.16.3 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
