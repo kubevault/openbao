@@ -28,6 +28,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/SAP/go-hdb v1.16.12
 	github.com/amsokol/ignite-go-client v0.12.2
+	github.com/apple/foundationdb/bindings/go v0.0.0-20220718182512-78fecb76d9f7
 	github.com/armon/go-radix v1.0.0
 	github.com/caddyserver/certmagic v0.25.4
 	github.com/cenkalti/backoff/v5 v5.0.3
@@ -47,6 +48,7 @@ require (
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-metrics-stackdriver v0.2.0
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/cap v0.13.0
 	github.com/hashicorp/cli v1.1.7
 	github.com/hashicorp/errwrap v1.1.0
@@ -256,7 +258,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.17 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/gophercloud/gophercloud v0.1.0 // indirect
@@ -361,6 +362,7 @@ require (
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260630182238-925bb5da69e7 // indirect
