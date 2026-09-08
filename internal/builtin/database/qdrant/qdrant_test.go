@@ -267,6 +267,102 @@ func TestQdrant_ValueExists_Lifecycle(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestQdrant_NewUser_RejectsCustomValueExists(t *testing.T) {
+	db := newQdrant()
+	db.config = &qdrantConfig{
+		URL:    "http://localhost:6333",
+		APIKey: "test-admin-key",
+	}
+
+	_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+		Statements: dbplugin.Statements{
+			Commands: []string{`{"access": "r", "value_exists": {"collection": "custom"}}`},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "value_exists claim cannot be customized in creation statements")
+}
+
+func TestQdrant_CustomValidationCollectionConfig(t *testing.T) {
+	adminKey := "test-secret-key-custom"
+	customCol := "custom_validation_users"
+	var collectionsCreated []string
+	var pointsInserted []map[string]any
+	var pointsDeleted []map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/collections/"+customCol:
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"status":{"error":"Collection not found"}}`))
+
+		case r.Method == http.MethodPut && r.URL.Path == "/collections/"+customCol:
+			collectionsCreated = append(collectionsCreated, r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"result":true,"status":"ok"}`))
+
+		case r.Method == http.MethodPut && r.URL.Path == "/collections/"+customCol+"/points":
+			var payload map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+			pointsInserted = append(pointsInserted, payload)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"result":{"operation_id":1,"status":"completed"},"status":"ok"}`))
+
+		case r.Method == http.MethodPost && r.URL.Path == "/collections/"+customCol+"/points/delete":
+			var payload map[string]any
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+			pointsDeleted = append(pointsDeleted, payload)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"result":{"operation_id":2,"status":"completed"},"status":"ok"}`))
+
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	db := newQdrant()
+	_, err := db.Initialize(context.Background(), dbplugin.InitializeRequest{
+		Config: map[string]any{
+			"url":                   srv.URL,
+			"api_key":               adminKey,
+			"validation_collection": customCol,
+		},
+		VerifyConnection: false,
+	})
+	require.NoError(t, err)
+	defer db.Close()
+
+	resp, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+		Statements: dbplugin.Statements{
+			Commands: []string{"r"},
+		},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.Username)
+
+	// Verify JWT value_exists uses the custom validation collection
+	claims := jwt.MapClaims{}
+	token, err := jwt.ParseWithClaims(resp.Password, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(adminKey), nil
+	})
+	require.NoError(t, err)
+	require.True(t, token.Valid)
+	veClaim := claims["value_exists"].(map[string]any)
+	require.Equal(t, customCol, veClaim["collection"])
+
+	// Verify points were inserted into the custom validation collection
+	require.Len(t, collectionsCreated, 1)
+	require.Len(t, pointsInserted, 1)
+
+	// DeleteUser must delete from the custom validation collection
+	_, err = db.DeleteUser(context.Background(), dbplugin.DeleteUserRequest{
+		Username: resp.Username,
+	})
+	require.NoError(t, err)
+	require.Len(t, pointsDeleted, 1)
+}
+
 func TestQdrant_DeleteUser_Validation(t *testing.T) {
 	db := newQdrant()
 	_, err := db.DeleteUser(context.Background(), dbplugin.DeleteUserRequest{})

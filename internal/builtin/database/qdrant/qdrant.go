@@ -237,23 +237,19 @@ func (q *Qdrant) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbpl
 		claims["access"] = "m"
 	}
 
+	if _, hasValExists := claims["value_exists"]; hasValExists {
+		return dbplugin.NewUserResponse{}, errors.New("value_exists claim cannot be customized in creation statements; validation collection is managed by the plugin")
+	}
+
 	validationCol := q.validationCollection()
-	if _, hasValExists := claims["value_exists"]; !hasValExists {
-		claims["value_exists"] = map[string]any{
-			"collection": validationCol,
-			"matches": []map[string]any{
-				{
-					"key":   "user_id",
-					"value": username,
-				},
+	claims["value_exists"] = map[string]any{
+		"collection": validationCol,
+		"matches": []map[string]any{
+			{
+				"key":   "user_id",
+				"value": username,
 			},
-		}
-	} else {
-		if ve, ok := claims["value_exists"].(map[string]any); ok {
-			if col, ok := ve["collection"].(string); ok && col != "" {
-				validationCol = col
-			}
-		}
+		},
 	}
 
 	if q.client != nil {
