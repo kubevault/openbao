@@ -287,10 +287,21 @@ func normalizeTarget(cfg *igniteConfig) error {
 	return nil
 }
 
+func (cfg *igniteConfig) tlsConfigured() bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.CACert != "" || cfg.CAPath != "" || cfg.ClientCert != "" || cfg.ClientKey != "" || cfg.Insecure
+}
+
 func buildTLSConfig(cfg *igniteConfig) (*tls.Config, error) {
+	if cfg == nil || !cfg.tlsConfigured() {
+		return nil, nil
+	}
+
 	tlsCfg := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: cfg.Insecure,
+		InsecureSkipVerify: cfg.Insecure, //nolint:gosec // explicit operator opt-in
 		ServerName:         cfg.Host,
 	}
 
@@ -311,6 +322,10 @@ func buildTLSConfig(cfg *igniteConfig) (*tls.Config, error) {
 			}
 		}
 		tlsCfg.RootCAs = pool
+	}
+
+	if (cfg.ClientCert == "") != (cfg.ClientKey == "") {
+		return nil, errors.New("both client_cert and client_key are required for mutual TLS")
 	}
 
 	if cfg.ClientCert != "" && cfg.ClientKey != "" {
