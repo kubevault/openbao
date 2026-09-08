@@ -102,7 +102,7 @@ $ bao write database/roles/readonly \
 Default password change (when `update_statements.password` is empty):
 
 ```sql
-ALTER USER "{{username}}" PASSWORD "{{password}}";
+ALTER USER {{username}} PASSWORD "{{password}}" NO FORCE_FIRST_PASSWORD_CHANGE;
 ```
 
 ## Static roles

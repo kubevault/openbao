@@ -182,8 +182,7 @@ func TestHANA_UpdateUser(t *testing.T) {
 	tests := map[string]testCase{
 		"no update statements": {
 			commands:         []string{},
-			expectErrOnLogin: true,
-			expectedErrMsg:   "user is forced to change password",
+			expectErrOnLogin: false,
 		},
 		"with custom update statements": {
 			commands:         []string{testHANAUpdate},

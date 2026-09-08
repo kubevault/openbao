@@ -105,7 +105,7 @@ If both `Password` and `Expiration` are nil, returns no-op.
 Default password statement when none is provided:
 
 ```sql
-ALTER USER {{username}} PASSWORD "{{password}}"
+ALTER USER {{username}} PASSWORD "{{password}}" NO FORCE_FIRST_PASSWORD_CHANGE
 ```
 
 Default expiration statement:

@@ -260,7 +260,7 @@ func (h *HANA) updateUserPassword(ctx context.Context, tx *sql.Tx, username stri
 
 	stmts := req.Statements.Commands
 	if len(stmts) == 0 {
-		stmts = []string{`ALTER USER {{username}} PASSWORD "{{password}}"`}
+		stmts = []string{`ALTER USER {{username}} PASSWORD "{{password}}" NO FORCE_FIRST_PASSWORD_CHANGE`}
 	}
 
 	for _, stmt := range stmts {
