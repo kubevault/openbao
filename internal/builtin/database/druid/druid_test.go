@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -113,6 +114,134 @@ func TestDruid_FakeServer(t *testing.T) {
 	require.Contains(t, calls[6].path, "/authorization/db/auth2/users/")
 	require.Equal(t, "DELETE", calls[7].method)
 	require.Contains(t, calls[7].path, "/authentication/db/auth1/users/")
+}
+
+func TestDruid_NewUser_RollbackOnFailure(t *testing.T) {
+	type call struct{ method, path string }
+	var mu sync.Mutex
+	var calls []call
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls = append(calls, call{method: r.Method, path: r.URL.Path})
+		if r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/roles/roleFail") {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"role assignment failed"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close() //nolint:errcheck
+
+	db := newDruid()
+	_, err := db.Initialize(context.Background(), dbplugin.InitializeRequest{
+		Config: map[string]any{
+			"url":           srv.URL,
+			"username":      "admin",
+			"password":      "admin",
+			"authenticator": "auth1",
+			"authorizer":    "auth2",
+		},
+		VerifyConnection: true,
+	})
+	require.NoError(t, err)
+	defer db.Close() //nolint:errcheck
+
+	_, err = db.NewUser(context.Background(), dbplugin.NewUserRequest{
+		UsernameConfig: dbplugin.UsernameMetadata{DisplayName: "t", RoleName: "t"},
+		Statements:     dbplugin.Statements{Commands: []string{`{"roles":["roleFail"]}`}},
+		Password:       "BaoDruidPass1234",
+		Expiration:     time.Now().Add(time.Hour),
+	})
+	require.Error(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	var authnDeleted, authzDeleted bool
+	for _, c := range calls {
+		if c.method == http.MethodDelete && strings.Contains(c.path, "/authentication/db/auth1/users/") {
+			authnDeleted = true
+		}
+		if c.method == http.MethodDelete && strings.Contains(c.path, "/authorization/db/auth2/users/") {
+			authzDeleted = true
+		}
+	}
+	require.True(t, authnDeleted, "expected rollback to delete authenticator user")
+	require.True(t, authzDeleted, "expected rollback to delete authorizer user")
+}
+
+func TestDruid_DeleteUser_SurfacesAuthorizerError(t *testing.T) {
+	type call struct{ method, path string }
+	var mu sync.Mutex
+	var calls []call
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls = append(calls, call{method: r.Method, path: r.URL.Path})
+		if r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/authorization/db/auth2/users/") {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":"cannot delete authorizer user"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close() //nolint:errcheck
+
+	db := newDruid()
+	_, err := db.Initialize(context.Background(), dbplugin.InitializeRequest{
+		Config: map[string]any{
+			"url":           srv.URL,
+			"username":      "admin",
+			"password":      "admin",
+			"authenticator": "auth1",
+			"authorizer":    "auth2",
+		},
+		VerifyConnection: false,
+	})
+	require.NoError(t, err)
+	defer db.Close() //nolint:errcheck
+
+	_, err = db.DeleteUser(context.Background(), dbplugin.DeleteUserRequest{Username: "test-user"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot delete authorizer user")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, calls, 2)
+	require.Equal(t, http.MethodDelete, calls[0].method)
+	require.Contains(t, calls[0].path, "/authorization/db/auth2/users/test-user")
+	require.Equal(t, http.MethodDelete, calls[1].method)
+	require.Contains(t, calls[1].path, "/authentication/db/auth1/users/test-user")
+}
+
+func TestDruid_MTLSValidation(t *testing.T) {
+	db := newDruid()
+	_, err := db.Initialize(context.Background(), dbplugin.InitializeRequest{
+		Config: map[string]any{
+			"url":         "http://druid:8081",
+			"username":    "admin",
+			"password":    "admin",
+			"client_cert": "-----BEGIN CERTIFICATE-----\n...",
+		},
+		VerifyConnection: false,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "both client_cert and client_key must be provided together")
+
+	db2 := newDruid()
+	_, err2 := db2.Initialize(context.Background(), dbplugin.InitializeRequest{
+		Config: map[string]any{
+			"url":        "http://druid:8081",
+			"username":   "admin",
+			"password":   "admin",
+			"client_key": "-----BEGIN PRIVATE KEY-----\n...",
+		},
+		VerifyConnection: false,
+	})
+	require.Error(t, err2)
+	require.Contains(t, err2.Error(), "both client_cert and client_key must be provided together")
 }
 
 func TestDruid_Acceptance(t *testing.T) {

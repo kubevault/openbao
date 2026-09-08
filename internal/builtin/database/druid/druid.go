@@ -193,7 +193,16 @@ func (d *Druid) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbplu
 	}
 
 	cleanup := func(opErr error) (dbplugin.NewUserResponse, error) {
-		_ = d.doJSON(ctx, http.MethodDelete, d.authnPath("users", username), nil)
+		var errs []error
+		if err := d.doJSON(ctx, http.MethodDelete, d.authnPath("users", username), nil); err != nil {
+			errs = append(errs, fmt.Errorf("cleanup authn user: %w", err))
+		}
+		if err := d.doJSON(ctx, http.MethodDelete, d.authzPath("users", username), nil); err != nil {
+			errs = append(errs, fmt.Errorf("cleanup authz user: %w", err))
+		}
+		if len(errs) > 0 {
+			return dbplugin.NewUserResponse{}, errors.Join(append([]error{opErr}, errs...)...)
+		}
 		return dbplugin.NewUserResponse{}, opErr
 	}
 
@@ -244,9 +253,10 @@ func (d *Druid) DeleteUser(ctx context.Context, req dbplugin.DeleteUserRequest) 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	// Delete in both authorizer and authenticator; 404 is fine on either.
-	_ = d.doJSON(ctx, http.MethodDelete, d.authzPath("users", req.Username), nil)
-	if err := d.doJSON(ctx, http.MethodDelete, d.authnPath("users", req.Username), nil); err != nil {
+	errAuthz := d.doJSON(ctx, http.MethodDelete, d.authzPath("users", req.Username), nil)
+	errAuthn := d.doJSON(ctx, http.MethodDelete, d.authnPath("users", req.Username), nil)
+
+	if err := errors.Join(errAuthz, errAuthn); err != nil {
 		return dbplugin.DeleteUserResponse{}, fmt.Errorf("delete user: %w", err)
 	}
 	return dbplugin.DeleteUserResponse{}, nil
@@ -357,6 +367,10 @@ func newHTTPClient(cfg *druidConfig) (*http.Client, error) {
 			}
 		}
 		tlsCfg.RootCAs = pool
+	}
+
+	if (cfg.ClientCert != "" && cfg.ClientKey == "") || (cfg.ClientCert == "" && cfg.ClientKey != "") {
+		return nil, errors.New("both client_cert and client_key must be provided together")
 	}
 
 	if cfg.ClientCert != "" && cfg.ClientKey != "" {
