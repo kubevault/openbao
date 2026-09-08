@@ -280,7 +280,121 @@ func TestQdrant_NewUser_RejectsCustomValueExists(t *testing.T) {
 		},
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "value_exists claim cannot be customized in creation statements")
+	require.Contains(t, err.Error(), `unsupported key "value_exists" in creation statement`)
+}
+
+func TestQdrant_NewUser_StrictValidation(t *testing.T) {
+	db := newQdrant()
+	db.config = &qdrantConfig{
+		URL:    "http://localhost:6333",
+		APIKey: "test-admin-key",
+	}
+
+	t.Run("empty statements fails closed", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "at least one creation statement specifying access permissions is required")
+
+		_, err = db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{"   "}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "at least one creation statement specifying access permissions is required")
+	})
+
+	t.Run("malformed json object fails", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`{"access": [`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "malformed JSON in creation statement")
+	})
+
+	t.Run("malformed json array fails", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`[{"collection": "test"}`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "malformed JSON array in creation statement")
+	})
+
+	t.Run("reserved claim sub cannot be overwritten", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`{"sub": "attacker", "access": "r"}`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `unsupported key "sub" in creation statement`)
+	})
+
+	t.Run("reserved claim exp cannot be overwritten", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`{"exp": 9999999999, "access": "r"}`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), `unsupported key "exp" in creation statement`)
+	})
+
+	t.Run("unrecognized string shorthand fails", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`invalid_syntax`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unrecognized creation statement")
+	})
+
+	t.Run("invalid collection access level fails", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`products:superuser`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unrecognized creation statement")
+
+		_, err = db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`{"collection": "products", "access": "admin"}`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid access level")
+	})
+
+	t.Run("invalid global access level fails", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`{"access": "rw"}`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid global access")
+	})
+
+	t.Run("mixing global and collection rules fails", func(t *testing.T) {
+		_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`r`, `products:rw`}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot mix global access ('r'/'m') with collection-specific access rules")
+	})
+
+	t.Run("valid native JSON array of rules", func(t *testing.T) {
+		resp, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`[{"collection": "c1", "access": "r"}, {"collection": "c2", "access": "rw"}]`}},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Password)
+	})
+
+	t.Run("valid plain string shorthands", func(t *testing.T) {
+		resp, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`c1:r, c2:rw`}},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Password)
+
+		resp, err = db.NewUser(context.Background(), dbplugin.NewUserRequest{
+			Statements: dbplugin.Statements{Commands: []string{`manage`}},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Password)
+	})
 }
 
 func TestQdrant_CustomValidationCollectionConfig(t *testing.T) {

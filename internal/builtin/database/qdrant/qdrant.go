@@ -164,55 +164,102 @@ func (q *Qdrant) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbpl
 		claims["exp"] = req.Expiration.Unix()
 	}
 
-	// Parse creation statements for access permissions and claims.
+	// Parse creation statements for access permissions.
 	var collectionAccessList []any
+	var globalAccess string
+	hasCommands := false
 
 	for _, cmd := range req.Statements.Commands {
 		cmd = strings.TrimSpace(cmd)
 		if cmd == "" {
 			continue
 		}
+		hasCommands = true
 
 		// JSON Object
 		if strings.HasPrefix(cmd, "{") {
 			var obj map[string]any
-			if err := json.Unmarshal([]byte(cmd), &obj); err == nil {
-				// Single collection access rule: {"collection": "...", "access": "..."}
-				if col, ok := obj["collection"]; ok && col != "" {
-					collectionAccessList = append(collectionAccessList, obj)
-					continue
-				}
+			if err := json.Unmarshal([]byte(cmd), &obj); err != nil {
+				return dbplugin.NewUserResponse{}, fmt.Errorf("malformed JSON in creation statement: %w", err)
+			}
 
-				for k, v := range obj {
-					if k == "access" {
-						if list, isList := v.([]any); isList {
-							collectionAccessList = append(collectionAccessList, list...)
-						} else {
-							claims["access"] = v
-						}
-					} else {
-						claims[k] = v
+			// Validate allowed keys. Only "collection" and "access" are permitted.
+			for k := range obj {
+				if k != "access" && k != "collection" {
+					return dbplugin.NewUserResponse{}, fmt.Errorf("unsupported key %q in creation statement; only access permissions may be specified", k)
+				}
+			}
+
+			// Single collection access rule: {"collection": "...", "access": "..."}
+			if _, hasCol := obj["collection"]; hasCol {
+				rule, err := parseCollectionRule(obj)
+				if err != nil {
+					return dbplugin.NewUserResponse{}, err
+				}
+				collectionAccessList = append(collectionAccessList, rule)
+				continue
+			}
+
+			// Access wrapper: {"access": ...}
+			if accRaw, hasAcc := obj["access"]; hasAcc {
+				switch v := accRaw.(type) {
+				case string:
+					normalized := strings.ToLower(strings.TrimSpace(v))
+					switch normalized {
+					case "r", "read":
+						globalAccess = "r"
+					case "m", "manage":
+						globalAccess = "m"
+					default:
+						return dbplugin.NewUserResponse{}, fmt.Errorf("invalid global access %q in creation statement; expected 'r' or 'm'", v)
 					}
+				case []any:
+					for i, elem := range v {
+						elemMap, ok := elem.(map[string]any)
+						if !ok {
+							return dbplugin.NewUserResponse{}, fmt.Errorf("invalid collection access rule at index %d in creation statement", i)
+						}
+						rule, err := parseCollectionRule(elemMap)
+						if err != nil {
+							return dbplugin.NewUserResponse{}, fmt.Errorf("invalid collection rule at index %d: %w", i, err)
+						}
+						collectionAccessList = append(collectionAccessList, rule)
+					}
+				default:
+					return dbplugin.NewUserResponse{}, errors.New("invalid type for access field: expected string or array of collection rules")
 				}
 				continue
 			}
+
+			return dbplugin.NewUserResponse{}, errors.New("creation statement JSON object must specify 'access' or 'collection'")
 		}
 
 		// JSON Array
 		if strings.HasPrefix(cmd, "[") {
 			var arr []any
-			if err := json.Unmarshal([]byte(cmd), &arr); err == nil {
-				collectionAccessList = append(collectionAccessList, arr...)
-				continue
+			if err := json.Unmarshal([]byte(cmd), &arr); err != nil {
+				return dbplugin.NewUserResponse{}, fmt.Errorf("malformed JSON array in creation statement: %w", err)
 			}
+			for i, elem := range arr {
+				elemMap, ok := elem.(map[string]any)
+				if !ok {
+					return dbplugin.NewUserResponse{}, fmt.Errorf("invalid collection access rule at index %d in creation statement", i)
+				}
+				rule, err := parseCollectionRule(elemMap)
+				if err != nil {
+					return dbplugin.NewUserResponse{}, fmt.Errorf("invalid collection rule at index %d: %w", i, err)
+				}
+				collectionAccessList = append(collectionAccessList, rule)
+			}
+			continue
 		}
 
 		// Plain string shorthand
 		switch strings.ToLower(cmd) {
 		case "r", "read":
-			claims["access"] = "r"
+			globalAccess = "r"
 		case "m", "manage":
-			claims["access"] = "m"
+			globalAccess = "m"
 		default:
 			// "col1:rw, col2:r"
 			for _, part := range strings.Split(cmd, ",") {
@@ -220,25 +267,34 @@ func (q *Qdrant) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbpl
 				if part == "" {
 					continue
 				}
-				if col, acc, found := strings.Cut(part, ":"); found {
-					collectionAccessList = append(collectionAccessList, map[string]any{
-						"collection": strings.TrimSpace(col),
-						"access":     strings.TrimSpace(acc),
-					})
+				col, acc, found := strings.Cut(part, ":")
+				col = strings.TrimSpace(col)
+				acc = strings.TrimSpace(acc)
+				if !found || col == "" || (acc != "r" && acc != "rw") {
+					return dbplugin.NewUserResponse{}, fmt.Errorf("unrecognized creation statement %q; expected 'r', 'm', or 'collection:r|rw'", part)
 				}
+				collectionAccessList = append(collectionAccessList, map[string]any{
+					"collection": col,
+					"access":     acc,
+				})
 			}
 		}
 	}
 
-	if len(collectionAccessList) > 0 {
-		claims["access"] = collectionAccessList
-	} else if _, hasAccess := claims["access"]; !hasAccess {
-		// Default to manage ("m") if access claim is not set, matching Qdrant default
-		claims["access"] = "m"
+	if !hasCommands {
+		return dbplugin.NewUserResponse{}, errors.New("at least one creation statement specifying access permissions is required")
 	}
 
-	if _, hasValExists := claims["value_exists"]; hasValExists {
-		return dbplugin.NewUserResponse{}, errors.New("value_exists claim cannot be customized in creation statements; validation collection is managed by the plugin")
+	if len(collectionAccessList) > 0 && globalAccess != "" {
+		return dbplugin.NewUserResponse{}, errors.New("cannot mix global access ('r'/'m') with collection-specific access rules")
+	}
+
+	if len(collectionAccessList) > 0 {
+		claims["access"] = collectionAccessList
+	} else if globalAccess != "" {
+		claims["access"] = globalAccess
+	} else {
+		return dbplugin.NewUserResponse{}, errors.New("no valid access permissions were defined in creation statements")
 	}
 
 	validationCol := q.validationCollection()
@@ -312,6 +368,31 @@ func (q *Qdrant) validationCollection() string {
 		return q.config.ValidationCollection
 	}
 	return defaultValidationCollection
+}
+
+func parseCollectionRule(elemMap map[string]any) (map[string]any, error) {
+	for k := range elemMap {
+		if k != "collection" && k != "access" {
+			return nil, fmt.Errorf("unsupported key %q in collection access rule; only 'collection' and 'access' are allowed", k)
+		}
+	}
+	colRaw, hasCol := elemMap["collection"]
+	accRaw, hasAcc := elemMap["access"]
+	if !hasCol || !hasAcc {
+		return nil, errors.New("collection access rule must contain both 'collection' and 'access'")
+	}
+	col, ok1 := colRaw.(string)
+	acc, ok2 := accRaw.(string)
+	if !ok1 || strings.TrimSpace(col) == "" {
+		return nil, fmt.Errorf("invalid collection name: %v", colRaw)
+	}
+	if !ok2 || (acc != "r" && acc != "rw") {
+		return nil, fmt.Errorf("invalid access level %v for collection %q; expected 'r' or 'rw'", accRaw, col)
+	}
+	return map[string]any{
+		"collection": strings.TrimSpace(col),
+		"access":     acc,
+	}, nil
 }
 
 func (q *Qdrant) doRequest(ctx context.Context, method, path string, reqBody any) (*http.Response, []byte, error) {
