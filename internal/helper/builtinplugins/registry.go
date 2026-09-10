@@ -17,6 +17,7 @@ import (
 	credRadius "github.com/openbao/openbao/v2/internal/builtin/credential/radius"
 	credUserpass "github.com/openbao/openbao/v2/internal/builtin/credential/userpass"
 	dbCass "github.com/openbao/openbao/v2/internal/builtin/database/cassandra"
+	dbDB2 "github.com/openbao/openbao/v2/internal/builtin/database/db2"
 	dbDruid "github.com/openbao/openbao/v2/internal/builtin/database/druid"
 	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
 	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
@@ -94,6 +95,7 @@ func newRegistry() *registry {
 			"mysql-legacy-database-plugin": {Factory: dbMysql.New(dbMysql.DefaultLegacyUserNameTemplate)},
 
 			"cassandra-database-plugin":     {Factory: dbCass.New},
+			"db2-database-plugin":           {Factory: dbDB2.New},
 			"druid-database-plugin":         {Factory: dbDruid.New},
 			"elasticsearch-database-plugin": {Factory: dbES.New},
 			"hana-database-plugin":          {Factory: dbHana.New},
@@ -113,6 +115,7 @@ func newRegistry() *registry {
 			"valkey-database-plugin":        {Factory: dbValkey.New},
 			"weaviate-database-plugin":      {Factory: dbWeaviate.New},
 			"remote-cassandra-plugin":       {Factory: dbRemote.New("cassandra-database-plugin")},
+			"remote-db2-plugin":             {Factory: dbRemote.New("db2-database-plugin")},
 			"remote-druid-plugin":           {Factory: dbRemote.New("druid-database-plugin")},
 			"remote-elasticsearch-plugin":   {Factory: dbRemote.New("elasticsearch-database-plugin")},
 			"remote-hana-plugin":            {Factory: dbRemote.New("hana-database-plugin")},
