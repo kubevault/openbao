@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	dbplugin "github.com/openbao/openbao/sdk/v2/database/dbplugin/v5"
 	"github.com/stretchr/testify/require"
@@ -56,10 +57,6 @@ func TestWeaviate_NewUser_And_DeleteUser(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/.well-known/ready":
 			w.WriteHeader(http.StatusOK)
-
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/rotate-key"):
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(map[string]string{"apikey": "new-rotated-key"})
 
 		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/users/db/"):
 			createdUser = strings.TrimPrefix(r.URL.Path, "/v1/users/db/")
@@ -117,10 +114,18 @@ func TestWeaviate_NewUser_And_DeleteUser(t *testing.T) {
 	require.Equal(t, []string{"viewer", "customRole"}, assignedRoles)
 	mu.Unlock()
 
-	// Test UpdateUser (Rotate Key)
-	upResp, err := db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
+	// Test UpdateUser rejects password updates / static credentials
+	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
 		Username: resp.Username,
 		Password: &dbplugin.ChangePassword{NewPassword: "new"},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "weaviate does not support updating user credentials or static roles")
+
+	// Test UpdateUser allows expiration update (lease renewal)
+	upResp, err := db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
+		Username:   resp.Username,
+		Expiration: &dbplugin.ChangeExpiration{NewExpiration: time.Now().Add(time.Hour)},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, upResp)
@@ -264,6 +269,19 @@ func TestWeaviate_UpdateUser_Validation(t *testing.T) {
 	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{Username: "u"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no changes requested")
+
+	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
+		Username: "u",
+		Password: &dbplugin.ChangePassword{NewPassword: "p"},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "weaviate does not support updating user credentials or static roles")
+
+	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
+		Username:   "u",
+		Expiration: &dbplugin.ChangeExpiration{NewExpiration: time.Now().Add(time.Hour)},
+	})
+	require.NoError(t, err)
 }
 
 func TestWeaviate_DeleteUser_Validation(t *testing.T) {

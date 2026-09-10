@@ -18,8 +18,7 @@ via Weaviate's User Management and RBAC REST APIs:
   `POST /v1/users/db/{user_id}`, assigns roles configured in the role's
   creation statements via `POST /v1/authz/users/{id}/assign`, and returns
   Weaviate's generated API key in `NewUserResponse.Password`.
-- `UpdateUser` rotates the user's API key via
-  `POST /v1/users/db/{user_id}/rotate-key`.
+- `UpdateUser` validates requests but rejects password updates and static credentials because server-generated API keys cannot be returned via the v5 update response.
 - `DeleteUser` deletes the database user via `DELETE /v1/users/db/{user_id}`.
 
 ## Configuration
@@ -33,5 +32,5 @@ via Weaviate's User Management and RBAC REST APIs:
 ## Tests
 
 Always-on tests cover Type/Version, `NewUser` user creation and role assignment,
-`UpdateUser` key rotation, `DeleteUser`, healthcheck against `httptest.Server`,
+`UpdateUser` validation, `DeleteUser`, healthcheck against `httptest.Server`,
 and failure paths.

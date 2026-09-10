@@ -269,31 +269,19 @@ func (w *Weaviate) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (db
 	}, nil
 }
 
-// UpdateUser handles user key rotation.
+// UpdateUser handles user updates. Weaviate generates dynamic database user API keys
+// and does not support password updates or static credentials because server-generated
+// keys cannot be returned via the v5 update response.
 func (w *Weaviate) UpdateUser(ctx context.Context, req dbplugin.UpdateUserRequest) (dbplugin.UpdateUserResponse, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	if req.Username == "" {
 		return dbplugin.UpdateUserResponse{}, errors.New("missing username")
 	}
 	if req.Password == nil && req.Expiration == nil {
 		return dbplugin.UpdateUserResponse{}, errors.New("no changes requested")
 	}
-
-	if req.Password != nil && w.client != nil && w.config != nil {
-		path := "/v1/users/db/" + url.PathEscape(req.Username) + "/rotate-key"
-		resp, body, err := w.doRequest(ctx, http.MethodPost, path, nil)
-		if err != nil {
-			return dbplugin.UpdateUserResponse{}, fmt.Errorf("failed to rotate key for user %q: %w", req.Username, err)
-		}
-		// If user exists on Weaviate, rotate-key returns 200.
-		// If 404 (user not found), we don't fail.
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-			return dbplugin.UpdateUserResponse{}, fmt.Errorf("failed to rotate key for user %q: %w", req.Username, formatWeaviateError(resp.Status, body))
-		}
+	if req.Password != nil {
+		return dbplugin.UpdateUserResponse{}, errors.New("weaviate does not support updating user credentials or static roles")
 	}
-
 	return dbplugin.UpdateUserResponse{}, nil
 }
 

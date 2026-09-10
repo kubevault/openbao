@@ -12,7 +12,7 @@ $ go test ./internal/builtin/database/weaviate/...
 ```
 
 Covers Type/Version, `NewUser` dynamic user creation + role assignment,
-`UpdateUser` key rotation, `DeleteUser`, and `Healthcheck` against an
+`UpdateUser` validation, `DeleteUser`, and `Healthcheck` against an
 `httptest.Server` (200 and 401).
 
 ## Acceptance / manual
