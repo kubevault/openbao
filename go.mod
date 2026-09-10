@@ -42,11 +42,13 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/go-test/deep v1.1.1
 	github.com/go-viper/mapstructure/v2 v2.5.0
+	github.com/go-zookeeper/zk v1.0.4
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-metrics-stackdriver v0.2.0
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/cap v0.13.0
 	github.com/hashicorp/cli v1.1.7
 	github.com/hashicorp/errwrap v1.1.0
@@ -256,7 +258,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.17 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/gophercloud/gophercloud v0.1.0 // indirect
