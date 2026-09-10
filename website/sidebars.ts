@@ -344,10 +344,20 @@ const sidebars: SidebarsConfig = {
                         "secrets/databases/index",
                         "secrets/databases/cassandra",
                         "secrets/databases/custom",
+                        "secrets/databases/druid",
+                        "secrets/databases/elasticsearch",
+                        "secrets/databases/hana",
                         "secrets/databases/ignite",
                         "secrets/databases/influxdb",
+                        "secrets/databases/milvus",
+                        "secrets/databases/mongodb",
+                        "secrets/databases/mssql",
                         "secrets/databases/mysql-maria",
+                        "secrets/databases/neo4j",
+                        "secrets/databases/oracle",
                         "secrets/databases/postgresql",
+                        "secrets/databases/rabbitmq",
+                        "secrets/databases/solr",
                         "secrets/databases/valkey",
                     ],
                     Identity: [
@@ -375,7 +385,6 @@ const sidebars: SidebarsConfig = {
                         "secrets/pki/rotation-primitives",
                     ],
                 },
-                "secrets/rabbitmq",
                 {
                     SSH: [
                         "secrets/ssh/index",
