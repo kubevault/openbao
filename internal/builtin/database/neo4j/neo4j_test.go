@@ -84,6 +84,38 @@ func TestNeo4j_UpdateUser_Validation(t *testing.T) {
 	require.Contains(t, err.Error(), "no changes requested")
 }
 
+func TestNeo4j_DeleteUser_Validation(t *testing.T) {
+	db := newNeo4j()
+	_, err := db.DeleteUser(context.Background(), dbplugin.DeleteUserRequest{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing username")
+}
+
+func TestNeo4j_NotInitialized(t *testing.T) {
+	db := newNeo4j()
+
+	_, err := db.NewUser(context.Background(), dbplugin.NewUserRequest{
+		Statements: dbplugin.Statements{
+			Commands: []string{`{"roles":["reader"]}`},
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "database not initialized")
+
+	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
+		Username: "u",
+		Password: &dbplugin.ChangePassword{NewPassword: "p"},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "database not initialized")
+
+	_, err = db.DeleteUser(context.Background(), dbplugin.DeleteUserRequest{
+		Username: "u",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "database not initialized")
+}
+
 func TestNeo4j_Acceptance(t *testing.T) {
 	if os.Getenv("BAO_ACC") != "1" || os.Getenv("NEO4J_URI") == "" {
 		t.Skip("set BAO_ACC=1 and NEO4J_URI to run Neo4j acceptance tests")

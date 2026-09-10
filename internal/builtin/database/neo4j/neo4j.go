@@ -206,6 +206,10 @@ func (n *Neo4j) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbplu
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	if n.driver == nil || n.config == nil {
+		return dbplugin.NewUserResponse{}, errors.New("database not initialized")
+	}
+
 	username, err := n.usernameProducer.Generate(req.UsernameConfig)
 	if err != nil {
 		return dbplugin.NewUserResponse{}, err
@@ -259,6 +263,10 @@ func (n *Neo4j) UpdateUser(ctx context.Context, req dbplugin.UpdateUserRequest) 
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	if n.driver == nil || n.config == nil {
+		return dbplugin.UpdateUserResponse{}, errors.New("database not initialized")
+	}
+
 	sess := n.driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: n.config.Database})
 	defer sess.Close(ctx) //nolint:errcheck
 
@@ -273,8 +281,16 @@ func (n *Neo4j) UpdateUser(ctx context.Context, req dbplugin.UpdateUserRequest) 
 }
 
 func (n *Neo4j) DeleteUser(ctx context.Context, req dbplugin.DeleteUserRequest) (dbplugin.DeleteUserResponse, error) {
+	if req.Username == "" {
+		return dbplugin.DeleteUserResponse{}, errors.New("missing username")
+	}
+
 	n.mu.Lock()
 	defer n.mu.Unlock()
+
+	if n.driver == nil || n.config == nil {
+		return dbplugin.DeleteUserResponse{}, errors.New("database not initialized")
+	}
 
 	sess := n.driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: n.config.Database})
 	defer sess.Close(ctx) //nolint:errcheck
