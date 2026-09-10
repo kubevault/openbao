@@ -23,10 +23,15 @@ const sidebars: SidebarsConfig = {
           Databases: [
             "secret/databases/index",
             "secret/databases/cassandra",
+            "secret/databases/elasticsearch",
             "secret/databases/hana",
             "secret/databases/influxdb",
+            "secret/databases/mongodb",
+            "secret/databases/mssql",
             "secret/databases/mysql-maria",
+            "secret/databases/oracle",
             "secret/databases/postgresql",
+            "secret/databases/rabbitmq",
             "secret/databases/valkey",
           ],
           Identity: [
@@ -58,7 +63,6 @@ const sidebars: SidebarsConfig = {
         "secret/kubernetes",
         "secret/ldap",
         "secret/pki",
-        "secret/rabbitmq",
         "secret/ssh",
         "secret/totp",
         "secret/transit",

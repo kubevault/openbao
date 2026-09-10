@@ -174,18 +174,28 @@ func (m *mockBuiltinRegistry) Keys(pluginType consts.PluginType) []string {
 			"mysql-legacy-database-plugin",
 
 			"cassandra-database-plugin",
+			"elasticsearch-database-plugin",
 			"hana-database-plugin",
 			"influxdb-database-plugin",
+			"mongodb-database-plugin",
+			"mssql-database-plugin",
+			"oracle-database-plugin",
 			"postgresql-database-plugin",
+			"rabbitmq-database-plugin",
 			"redis-database-plugin",
 			"valkey-database-plugin",
 			"remote-cassandra-plugin",
 			"remote-influxdb-plugin",
 			"remote-mysql-plugin",
 			"remote-postgres-plugin",
+			"remote-rabbitmq-plugin",
 			"remote-redis-plugin",
 			"remote-valkey-plugin",
+			"remote-elasticsearch-plugin",
 			"remote-hana-plugin",
+			"remote-mongodb-plugin",
+			"remote-mssql-plugin",
+			"remote-oracle-plugin",
 		}
 	case consts.PluginTypeCredential:
 		return []string{

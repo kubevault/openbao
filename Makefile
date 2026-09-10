@@ -230,7 +230,19 @@ spellcheck:
 hana-database-plugin:
 	@CGO_ENABLED=0 go build -o bin/hana-database-plugin ./internal/builtin/database/hana/hana-database-plugin
 
-.PHONY: bin default prep test vet bootstrap fmt fmtcheck hana-database-plugin ember-dist ember-dist-dev static-dist static-dist-dev assetcheck check-openbao-in-path packages build build-ci semgrep semgrep-ci vet-godoctests ci-vet-godoctests
+elasticsearch-database-plugin:
+	@CGO_ENABLED=0 go build -o bin/elasticsearch-database-plugin ./internal/builtin/database/elasticsearch/elasticsearch-database-plugin
+
+oracle-database-plugin:
+	@CGO_ENABLED=0 go build -o bin/oracle-database-plugin ./internal/builtin/database/oracle/oracle-database-plugin
+
+mssql-database-plugin:
+	@CGO_ENABLED=0 go build -o bin/mssql-database-plugin ./internal/builtin/database/mssql/mssql-database-plugin
+
+mongodb-database-plugin:
+	@CGO_ENABLED=0 go build -o bin/mongodb-database-plugin ./internal/builtin/database/mongodb/mongodb-database-plugin
+
+.PHONY: bin default prep test vet bootstrap fmt fmtcheck hana-database-plugin elasticsearch-database-plugin oracle-database-plugin mssql-database-plugin mongodb-database-plugin ember-dist ember-dist-dev static-dist static-dist-dev assetcheck check-openbao-in-path packages build build-ci semgrep semgrep-ci vet-godoctests ci-vet-godoctests
 
 .NOTPARALLEL: ember-dist ember-dist-dev
 
