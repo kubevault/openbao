@@ -32,6 +32,7 @@ import (
 	dbDruid "github.com/openbao/openbao/v2/internal/builtin/database/druid"
 	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
 	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
+	dbIgnite "github.com/openbao/openbao/v2/internal/builtin/database/ignite"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
 	dbMilvus "github.com/openbao/openbao/v2/internal/builtin/database/milvus"
 	dbMongo "github.com/openbao/openbao/v2/internal/builtin/database/mongodb"
@@ -418,6 +419,8 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbES.New
 	case "hana-database-plugin":
 		factory = dbHana.New
+	case "ignite-database-plugin":
+		factory = dbIgnite.New
 	case "milvus-database-plugin":
 		factory = dbMilvus.New
 	case "mongodb-database-plugin":

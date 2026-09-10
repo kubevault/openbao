@@ -26,6 +26,7 @@ const sidebars: SidebarsConfig = {
             "secret/databases/druid",
             "secret/databases/elasticsearch",
             "secret/databases/hana",
+            "secret/databases/ignite",
             "secret/databases/influxdb",
             "secret/databases/milvus",
             "secret/databases/mongodb",
