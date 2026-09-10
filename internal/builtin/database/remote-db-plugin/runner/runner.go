@@ -33,6 +33,7 @@ import (
 	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
 	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
+	dbMilvus "github.com/openbao/openbao/v2/internal/builtin/database/milvus"
 	dbMongo "github.com/openbao/openbao/v2/internal/builtin/database/mongodb"
 	dbMSSQL "github.com/openbao/openbao/v2/internal/builtin/database/mssql"
 	dbMySQL "github.com/openbao/openbao/v2/internal/builtin/database/mysql"
@@ -417,6 +418,8 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbES.New
 	case "hana-database-plugin":
 		factory = dbHana.New
+	case "milvus-database-plugin":
+		factory = dbMilvus.New
 	case "mongodb-database-plugin":
 		factory = dbMongo.New
 	case "mssql-database-plugin":

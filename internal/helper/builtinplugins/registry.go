@@ -21,6 +21,7 @@ import (
 	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
 	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
+	dbMilvus "github.com/openbao/openbao/v2/internal/builtin/database/milvus"
 	dbMongo "github.com/openbao/openbao/v2/internal/builtin/database/mongodb"
 	dbMSSQL "github.com/openbao/openbao/v2/internal/builtin/database/mssql"
 	dbMysql "github.com/openbao/openbao/v2/internal/builtin/database/mysql"
@@ -93,6 +94,7 @@ func newRegistry() *registry {
 			"elasticsearch-database-plugin": {Factory: dbES.New},
 			"hana-database-plugin":          {Factory: dbHana.New},
 			"influxdb-database-plugin":      {Factory: dbInflux.New},
+			"milvus-database-plugin":        {Factory: dbMilvus.New},
 			"mongodb-database-plugin":       {Factory: dbMongo.New},
 			"mssql-database-plugin":         {Factory: dbMSSQL.New},
 			"neo4j-database-plugin":         {Factory: dbNeo4j.New},
@@ -107,6 +109,7 @@ func newRegistry() *registry {
 			"remote-elasticsearch-plugin":   {Factory: dbRemote.New("elasticsearch-database-plugin")},
 			"remote-hana-plugin":            {Factory: dbRemote.New("hana-database-plugin")},
 			"remote-influxdb-plugin":        {Factory: dbRemote.New("influxdb-database-plugin")},
+			"remote-milvus-plugin":          {Factory: dbRemote.New("milvus-database-plugin")},
 			"remote-mongodb-plugin":         {Factory: dbRemote.New("mongodb-database-plugin")},
 			"remote-mssql-plugin":           {Factory: dbRemote.New("mssql-database-plugin")},
 			"remote-mysql-plugin":           {Factory: dbRemote.New("mysql-database-plugin")},
