@@ -407,10 +407,14 @@ func (w *Weaviate) ensureRole(ctx context.Context, role weaviateRoleDef) error {
 			}{
 				Permissions: role.Permissions,
 			}
-			pResp, _, pErr := w.doRequest(ctx, http.MethodPost, addPermPath, addBody)
-			if pErr == nil && pResp != nil && (pResp.StatusCode == http.StatusOK || pResp.StatusCode == http.StatusNoContent || pResp.StatusCode == http.StatusConflict) {
+			pResp, pBody, pErr := w.doRequest(ctx, http.MethodPost, addPermPath, addBody)
+			if pErr != nil {
+				return fmt.Errorf("failed to add permissions to role %q: %w", role.Name, pErr)
+			}
+			if pResp.StatusCode == http.StatusOK || pResp.StatusCode == http.StatusNoContent || pResp.StatusCode == http.StatusConflict {
 				return nil
 			}
+			return fmt.Errorf("failed to add permissions to role %q: %w", role.Name, formatWeaviateError(pResp.Status, pBody))
 		}
 		return nil
 	}

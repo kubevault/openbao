@@ -6,6 +6,7 @@ package weaviate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,12 @@ import (
 	dbplugin "github.com/openbao/openbao/sdk/v2/database/dbplugin/v5"
 	"github.com/stretchr/testify/require"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestWeaviate_TypeAndVersion(t *testing.T) {
 	db := newWeaviate()
@@ -224,6 +231,68 @@ func TestWeaviate_NewUser_CustomRoles(t *testing.T) {
 	require.Equal(t, []string{"customrole", "clusterAdmin"}, createdRoles)
 	require.Equal(t, []string{"viewer", "customrole", "clusterAdmin"}, assignedRoles)
 	mu.Unlock()
+}
+
+func TestWeaviate_EnsureRole_AddPermissionsFailures(t *testing.T) {
+	transportErr := errors.New("connection reset")
+	tests := []struct {
+		name        string
+		response    *http.Response
+		err         error
+		expectedErr string
+	}{
+		{
+			name:        "transport error",
+			err:         transportErr,
+			expectedErr: "connection reset",
+		},
+		{
+			name: "non-success response",
+			response: &http.Response{
+				StatusCode: http.StatusForbidden,
+				Status:     "403 Forbidden",
+				Body:       io.NopCloser(strings.NewReader(`{"error":[{"message":"permission denied"}]}`)),
+				Header:     make(http.Header),
+			},
+			expectedErr: "403 Forbidden: permission denied",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			db := newWeaviate()
+			db.config = &weaviateConfig{URL: "http://weaviate.example"}
+			db.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				if calls == 1 {
+					return &http.Response{
+						StatusCode: http.StatusConflict,
+						Status:     "409 Conflict",
+						Body:       http.NoBody,
+						Header:     make(http.Header),
+						Request:    req,
+					}, nil
+				}
+				if tt.response != nil {
+					tt.response.Request = req
+				}
+				return tt.response, tt.err
+			})}
+
+			err := db.ensureRole(context.Background(), weaviateRoleDef{
+				Name:        "analyst",
+				Permissions: []map[string]string{{"action": "read_data"}},
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), `failed to add permissions to role "analyst"`)
+			require.Contains(t, err.Error(), tt.expectedErr)
+			if tt.err != nil {
+				require.ErrorIs(t, err, tt.err)
+			}
+			require.Equal(t, 2, calls)
+		})
+	}
 }
 
 func TestWeaviate_NewUser_StructuredRoles(t *testing.T) {
