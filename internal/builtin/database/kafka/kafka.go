@@ -25,6 +25,7 @@ import (
 	"github.com/openbao/openbao/sdk/v2/helper/template"
 	"github.com/openbao/openbao/sdk/v2/logical"
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl"
 	saslscram "github.com/twmb/franz-go/pkg/sasl/scram"
@@ -136,6 +137,7 @@ func (k *Kafka) Initialize(ctx context.Context, req dbplugin.InitializeRequest) 
 	if err := mapstructure.WeakDecode(req.Config, cfg); err != nil {
 		return dbplugin.InitializeResponse{}, err
 	}
+	cfg.Brokers = sanitizeBrokers(cfg.Brokers)
 	if len(cfg.Brokers) == 0 {
 		return dbplugin.InitializeResponse{}, errors.New("brokers is required")
 	}
@@ -226,6 +228,10 @@ func (k *Kafka) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbplu
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
+	if k.admin == nil {
+		return dbplugin.NewUserResponse{}, errors.New("database not initialized")
+	}
+
 	username, err := k.usernameProducer.Generate(req.UsernameConfig)
 	if err != nil {
 		return dbplugin.NewUserResponse{}, err
@@ -237,7 +243,11 @@ func (k *Kafka) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbplu
 		Iterations: int32(stmt.Iterations),
 		Password:   req.Password,
 	}
-	if _, err := k.admin.AlterUserSCRAMs(ctx, nil, []kadm.UpsertSCRAM{upsert}); err != nil {
+	altered, err := k.admin.AlterUserSCRAMs(ctx, nil, []kadm.UpsertSCRAM{upsert})
+	if err != nil {
+		return dbplugin.NewUserResponse{}, fmt.Errorf("create scram credential: %w", err)
+	}
+	if err := checkAlteredSCRAMs(altered, false); err != nil {
 		return dbplugin.NewUserResponse{}, fmt.Errorf("create scram credential: %w", err)
 	}
 
@@ -329,51 +339,188 @@ func (k *Kafka) UpdateUser(ctx context.Context, req dbplugin.UpdateUserRequest) 
 		return dbplugin.UpdateUserResponse{}, nil
 	}
 
-	mechName := "SCRAM-SHA-256"
-	if k.config != nil && (k.config.Mechanism == "SCRAM-SHA-512" || k.config.Mechanism == "SCRAM-SHA-256") {
-		mechName = k.config.Mechanism
-	}
-	mech, err := kadmScramMechanism(mechName)
-	if err != nil {
-		return dbplugin.UpdateUserResponse{}, err
-	}
-
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
-	upsert := kadm.UpsertSCRAM{
-		User:       req.Username,
-		Mechanism:  mech,
-		Iterations: 4096,
-		Password:   req.Password.NewPassword,
+	if k.admin == nil {
+		return dbplugin.UpdateUserResponse{}, errors.New("database not initialized")
 	}
-	if _, err := k.admin.AlterUserSCRAMs(ctx, nil, []kadm.UpsertSCRAM{upsert}); err != nil {
-		return dbplugin.UpdateUserResponse{}, fmt.Errorf("update scram credential: %w", err)
+
+	described, err := k.admin.DescribeUserSCRAMs(ctx, req.Username)
+	if err != nil {
+		return dbplugin.UpdateUserResponse{}, fmt.Errorf("describe scram credentials: %w", err)
+	}
+
+	defaultMech := kadm.ScramSha256
+	if k.config != nil && k.config.Mechanism == "SCRAM-SHA-512" {
+		defaultMech = kadm.ScramSha512
+	}
+
+	upserts, err := scramUpsertsForUser(req.Username, req.Password.NewPassword, described[req.Username], defaultMech)
+	if err != nil {
+		return dbplugin.UpdateUserResponse{}, fmt.Errorf("describe scram credentials: %w", err)
+	}
+
+	for _, upsert := range upserts {
+		altered, err := k.admin.AlterUserSCRAMs(ctx, nil, []kadm.UpsertSCRAM{upsert})
+		if err != nil {
+			return dbplugin.UpdateUserResponse{}, fmt.Errorf("update scram credential: %w", err)
+		}
+		if err := checkAlteredSCRAMs(altered, false); err != nil {
+			return dbplugin.UpdateUserResponse{}, fmt.Errorf("update scram credential: %w", err)
+		}
 	}
 	return dbplugin.UpdateUserResponse{}, nil
 }
 
+func scramUpsertsForUser(username string, password string, desc kadm.DescribedUserSCRAM, defaultMech kadm.ScramMechanism) ([]kadm.UpsertSCRAM, error) {
+	if desc.Err != nil && !errors.Is(desc.Err, kerr.ResourceNotFound) {
+		if desc.ErrMessage != "" {
+			return nil, fmt.Errorf("%w: %s", desc.Err, desc.ErrMessage)
+		}
+		return nil, desc.Err
+	}
+
+	var upserts []kadm.UpsertSCRAM
+	if desc.Err == nil && len(desc.CredInfos) > 0 {
+		seen := make(map[kadm.ScramMechanism]bool)
+		for _, info := range desc.CredInfos {
+			mech := info.Mechanism
+			if mech != kadm.ScramSha256 && mech != kadm.ScramSha512 {
+				mech = defaultMech
+			}
+			if seen[mech] {
+				continue
+			}
+			seen[mech] = true
+			iter := info.Iterations
+			if iter <= 0 {
+				iter = 4096
+			}
+			upserts = append(upserts, kadm.UpsertSCRAM{
+				User:       username,
+				Mechanism:  mech,
+				Iterations: iter,
+				Password:   password,
+			})
+		}
+		return upserts, nil
+	}
+
+	return []kadm.UpsertSCRAM{
+		{
+			User:       username,
+			Mechanism:  defaultMech,
+			Iterations: 4096,
+			Password:   password,
+		},
+	}, nil
+}
+
 func (k *Kafka) DeleteUser(ctx context.Context, req dbplugin.DeleteUserRequest) (dbplugin.DeleteUserResponse, error) {
+	if req.Username == "" {
+		return dbplugin.DeleteUserResponse{}, errors.New("missing username")
+	}
+
 	k.mu.Lock()
 	defer k.mu.Unlock()
 
+	if k.admin == nil {
+		return dbplugin.DeleteUserResponse{}, errors.New("database not initialized")
+	}
+
 	// 1. Delete all ACLs (Allow and Deny) for this principal across all resources/operations/hosts
 	delAllow := kadm.NewACLs().AnyResource().Allow("User:" + req.Username).AllowHosts().Operations(kadm.OpAny)
-	_, _ = k.admin.DeleteACLs(ctx, delAllow)
+	resAllow, err := k.admin.DeleteACLs(ctx, delAllow)
+	if err != nil {
+		return dbplugin.DeleteUserResponse{}, fmt.Errorf("delete allow ACLs: %w", err)
+	}
+	if err := checkDeleteACLResults(resAllow); err != nil {
+		return dbplugin.DeleteUserResponse{}, fmt.Errorf("delete allow ACL: %w", err)
+	}
 
 	delDeny := kadm.NewACLs().AnyResource().Deny("User:" + req.Username).DenyHosts().Operations(kadm.OpAny)
-	_, _ = k.admin.DeleteACLs(ctx, delDeny)
+	resDeny, err := k.admin.DeleteACLs(ctx, delDeny)
+	if err != nil {
+		return dbplugin.DeleteUserResponse{}, fmt.Errorf("delete deny ACLs: %w", err)
+	}
+	if err := checkDeleteACLResults(resDeny); err != nil {
+		return dbplugin.DeleteUserResponse{}, fmt.Errorf("delete deny ACL: %w", err)
+	}
 
 	// 2. Delete SCRAM credentials per mechanism individually (Kafka rejects duplicate user in a single request)
-	_, err256 := k.admin.AlterUserSCRAMs(ctx, []kadm.DeleteSCRAM{{User: req.Username, Mechanism: kadm.ScramSha256}}, nil)
-	_, err512 := k.admin.AlterUserSCRAMs(ctx, []kadm.DeleteSCRAM{{User: req.Username, Mechanism: kadm.ScramSha512}}, nil)
-	if err256 != nil && err512 != nil {
-		return dbplugin.DeleteUserResponse{}, fmt.Errorf("delete scram credential: %w", err256)
+	delSCRAM := func(mech kadm.ScramMechanism) error {
+		altered, err := k.admin.AlterUserSCRAMs(ctx, []kadm.DeleteSCRAM{{User: req.Username, Mechanism: mech}}, nil)
+		if err != nil {
+			return err
+		}
+		return checkAlteredSCRAMs(altered, true)
 	}
+
+	if err := delSCRAM(kadm.ScramSha256); err != nil {
+		return dbplugin.DeleteUserResponse{}, fmt.Errorf("delete SCRAM-SHA-256 credential: %w", err)
+	}
+	if err := delSCRAM(kadm.ScramSha512); err != nil {
+		return dbplugin.DeleteUserResponse{}, fmt.Errorf("delete SCRAM-SHA-512 credential: %w", err)
+	}
+
 	return dbplugin.DeleteUserResponse{}, nil
 }
 
+func checkAlteredSCRAMs(altered kadm.AlteredUserSCRAMs, ignoreNotFound bool) error {
+	for _, a := range altered {
+		if a.Err != nil {
+			if ignoreNotFound && errors.Is(a.Err, kerr.ResourceNotFound) {
+				continue
+			}
+			if a.ErrMessage != "" {
+				return fmt.Errorf("%w: %s", a.Err, a.ErrMessage)
+			}
+			return a.Err
+		}
+	}
+	return nil
+}
+
+func checkDeleteACLResults(results kadm.DeleteACLsResults) error {
+	for _, res := range results {
+		if res.Err != nil {
+			if res.ErrMessage != "" {
+				return fmt.Errorf("%w: %s", res.Err, res.ErrMessage)
+			}
+			return res.Err
+		}
+		for _, m := range res.Deleted {
+			if m.Err != nil {
+				if m.ErrMessage != "" {
+					return fmt.Errorf("%w: %s", m.Err, m.ErrMessage)
+				}
+				return m.Err
+			}
+		}
+	}
+	return nil
+}
+
 // --- helpers ---------------------------------------------------------------
+
+func sanitizeBrokers(brokers []string) []string {
+	var clean []string
+	for _, b := range brokers {
+		for _, part := range strings.Split(b, ",") {
+			part = strings.TrimSpace(part)
+			if idx := strings.Index(part, "://"); idx != -1 {
+				part = part[idx+3:]
+			}
+			part = strings.TrimPrefix(part, "//")
+			part = strings.TrimRight(part, "/")
+			if part != "" {
+				clean = append(clean, part)
+			}
+		}
+	}
+	return clean
+}
 
 func pickMechanism(cfg *kafkaConfig) (sasl.Mechanism, error) {
 	switch cfg.Mechanism {
