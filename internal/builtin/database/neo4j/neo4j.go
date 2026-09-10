@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/go-secure-stdlib/strutil"
 	"github.com/mitchellh/mapstructure"
 	neo4j "github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	neo4jconfig "github.com/neo4j/neo4j-go-driver/v5/neo4j/config"
 	dbplugin "github.com/openbao/openbao/sdk/v2/database/dbplugin/v5"
 	"github.com/openbao/openbao/sdk/v2/database/helper/dbutil"
 	"github.com/openbao/openbao/sdk/v2/helper/template"
@@ -131,13 +132,13 @@ func (n *Neo4j) Initialize(ctx context.Context, req dbplugin.InitializeRequest) 
 		cfg.URI = parsedURI.String()
 	}
 
-	var configurers []func(*neo4j.Config)
+	var configurers []func(*neo4jconfig.Config)
 	if tlsSettings.Configured() {
 		tlsConfig, err := tlsSettings.Build(parsedURI.Hostname())
 		if err != nil {
 			return dbplugin.InitializeResponse{}, err
 		}
-		configurers = append(configurers, func(config *neo4j.Config) {
+		configurers = append(configurers, func(config *neo4jconfig.Config) {
 			config.TlsConfig = tlsConfig
 		})
 	}
