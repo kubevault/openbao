@@ -242,6 +242,7 @@ func (m *Milvus) Initialize(ctx context.Context, req dbplugin.InitializeRequest)
 	if err != nil {
 		return dbplugin.InitializeResponse{}, err
 	}
+	clientConfig.DisableConn = !req.VerifyConnection
 
 	client, err := milvusclient.NewClient(ctx, *clientConfig)
 	if err != nil {
@@ -456,7 +457,7 @@ func (m *Milvus) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbpl
 // UpdateUser handles user updates. Milvus requires the user's old password to
 // update credentials unless common.security.superUsers is configured. Because
 // OpenBao does not retain previously-generated dynamic passwords, password
-// update is a no-op to prevent credential rotation failures.
+// updates and static roles are unsupported.
 func (m *Milvus) UpdateUser(_ context.Context, req dbplugin.UpdateUserRequest) (dbplugin.UpdateUserResponse, error) {
 	if req.Username == "" {
 		return dbplugin.UpdateUserResponse{}, errors.New("missing username")
@@ -464,14 +465,9 @@ func (m *Milvus) UpdateUser(_ context.Context, req dbplugin.UpdateUserRequest) (
 	if req.Password == nil && req.Expiration == nil {
 		return dbplugin.UpdateUserResponse{}, errors.New("no changes requested")
 	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.client == nil {
-		return dbplugin.UpdateUserResponse{}, errors.New("database not initialized")
+	if req.Password != nil {
+		return dbplugin.UpdateUserResponse{}, errors.New("milvus does not support updating user credentials or static roles")
 	}
-
 	return dbplugin.UpdateUserResponse{}, nil
 }
 

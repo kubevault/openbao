@@ -22,6 +22,7 @@ import (
 type fakeMilvusServer struct {
 	milvuspb.UnimplementedMilvusServiceServer
 
+	connectRequests   []*milvuspb.ConnectRequest
 	createRequests    []*milvuspb.CreateCredentialRequest
 	roleRequests      []*milvuspb.OperateUserRoleRequest
 	updateRequests    []*milvuspb.UpdateCredentialRequest
@@ -40,7 +41,8 @@ func successStatus() *commonpb.Status {
 	return &commonpb.Status{ErrorCode: commonpb.ErrorCode_Success}
 }
 
-func (s *fakeMilvusServer) Connect(context.Context, *milvuspb.ConnectRequest) (*milvuspb.ConnectResponse, error) {
+func (s *fakeMilvusServer) Connect(_ context.Context, req *milvuspb.ConnectRequest) (*milvuspb.ConnectResponse, error) {
+	s.connectRequests = append(s.connectRequests, req)
 	return &milvuspb.ConnectResponse{Status: successStatus(), Identifier: 1}, nil
 }
 
@@ -200,12 +202,12 @@ func TestMilvus_CredentialLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Username)
 
-	// UpdateUser is a no-op to prevent rotation errors
+	// Password rotation is unsupported because Milvus requires the old password.
 	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
 		Username: resp.Username,
 		Password: &dbplugin.ChangePassword{NewPassword: "BaoMilvusPass456"},
 	})
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "milvus does not support updating user credentials or static roles")
 
 	_, err = db.DeleteUser(context.Background(), dbplugin.DeleteUserRequest{Username: resp.Username})
 	require.NoError(t, err)
@@ -219,7 +221,7 @@ func TestMilvus_CredentialLifecycle(t *testing.T) {
 	require.Equal(t, "public", server.roleRequests[0].GetRoleName())
 	require.Equal(t, milvuspb.OperateUserRoleType_AddUserToRole, server.roleRequests[0].GetType())
 
-	// UpdateUser was a no-op, so updateRequests should be empty
+	// UpdateUser rejected the rotation without changing the credential.
 	require.Empty(t, server.updateRequests)
 
 	require.Len(t, server.deleteRequests, 1)
@@ -481,7 +483,7 @@ func TestMilvus_NotInitialized(t *testing.T) {
 		Password: &dbplugin.ChangePassword{NewPassword: "p"},
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "database not initialized")
+	require.Contains(t, err.Error(), "milvus does not support updating user credentials or static roles")
 
 	_, err = db.DeleteUser(context.Background(), dbplugin.DeleteUserRequest{Username: "u"})
 	require.Error(t, err)
@@ -498,6 +500,31 @@ func TestMilvus_UpdateUser_Validation(t *testing.T) {
 	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{Username: "u"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no changes requested")
+
+	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
+		Username:   "u",
+		Expiration: &dbplugin.ChangeExpiration{NewExpiration: time.Now().Add(time.Hour)},
+	})
+	require.NoError(t, err)
+}
+
+func TestMilvus_InitializeWithoutVerifyConnection(t *testing.T) {
+	server := &fakeMilvusServer{}
+	db := newMilvus()
+	_, err := db.Initialize(context.Background(), dbplugin.InitializeRequest{
+		Config: map[string]any{
+			"url":      startFakeMilvusServer(t, server),
+			"username": "root",
+			"password": "Milvus123",
+		},
+		VerifyConnection: false,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+
+	require.Empty(t, server.connectRequests)
 }
 
 func TestMilvus_DeleteUser_Validation(t *testing.T) {
