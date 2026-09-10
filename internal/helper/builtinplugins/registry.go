@@ -17,17 +17,28 @@ import (
 	credRadius "github.com/openbao/openbao/v2/internal/builtin/credential/radius"
 	credUserpass "github.com/openbao/openbao/v2/internal/builtin/credential/userpass"
 	dbCass "github.com/openbao/openbao/v2/internal/builtin/database/cassandra"
+	dbDruid "github.com/openbao/openbao/v2/internal/builtin/database/druid"
+	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
+	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
+	dbIgnite "github.com/openbao/openbao/v2/internal/builtin/database/ignite"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
+	dbKafka "github.com/openbao/openbao/v2/internal/builtin/database/kafka"
+	dbMilvus "github.com/openbao/openbao/v2/internal/builtin/database/milvus"
+	dbMongo "github.com/openbao/openbao/v2/internal/builtin/database/mongodb"
+	dbMSSQL "github.com/openbao/openbao/v2/internal/builtin/database/mssql"
 	dbMysql "github.com/openbao/openbao/v2/internal/builtin/database/mysql"
+	dbNeo4j "github.com/openbao/openbao/v2/internal/builtin/database/neo4j"
+	dbOracle "github.com/openbao/openbao/v2/internal/builtin/database/oracle"
 	dbPostgres "github.com/openbao/openbao/v2/internal/builtin/database/postgresql"
 	dbQdrant "github.com/openbao/openbao/v2/internal/builtin/database/qdrant"
+	dbRabbitmq "github.com/openbao/openbao/v2/internal/builtin/database/rabbitmq"
 	dbRemote "github.com/openbao/openbao/v2/internal/builtin/database/remote-db-plugin"
+	dbSolr "github.com/openbao/openbao/v2/internal/builtin/database/solr"
 	dbValkey "github.com/openbao/openbao/v2/internal/builtin/database/valkey"
 	logicalKube "github.com/openbao/openbao/v2/internal/builtin/logical/kubernetes"
 	logicalKv "github.com/openbao/openbao/v2/internal/builtin/logical/kv"
 	logicalLDAP "github.com/openbao/openbao/v2/internal/builtin/logical/openldap"
 	logicalPki "github.com/openbao/openbao/v2/internal/builtin/logical/pki"
-	logicalRabbit "github.com/openbao/openbao/v2/internal/builtin/logical/rabbitmq"
 	logicalRelay "github.com/openbao/openbao/v2/internal/builtin/logical/relay"
 	logicalSsh "github.com/openbao/openbao/v2/internal/builtin/logical/ssh"
 	logicalTotp "github.com/openbao/openbao/v2/internal/builtin/logical/totp"
@@ -81,19 +92,43 @@ func newRegistry() *registry {
 			"mysql-rds-database-plugin":    {Factory: dbMysql.New(dbMysql.DefaultLegacyUserNameTemplate)},
 			"mysql-legacy-database-plugin": {Factory: dbMysql.New(dbMysql.DefaultLegacyUserNameTemplate)},
 
-			"cassandra-database-plugin":  {Factory: dbCass.New},
-			"influxdb-database-plugin":   {Factory: dbInflux.New},
-			"postgresql-database-plugin": {Factory: dbPostgres.New},
-			"qdrant-database-plugin":     {Factory: dbQdrant.New},
-			"redis-database-plugin":      {Factory: dbValkey.New},
-			"valkey-database-plugin":     {Factory: dbValkey.New},
-			"remote-cassandra-plugin":    {Factory: dbRemote.New("cassandra-database-plugin")},
-			"remote-influxdb-plugin":     {Factory: dbRemote.New("influxdb-database-plugin")},
-			"remote-mysql-plugin":        {Factory: dbRemote.New("mysql-database-plugin")},
-			"remote-postgres-plugin":     {Factory: dbRemote.New("postgresql-database-plugin")},
-			"remote-redis-plugin":        {Factory: dbRemote.New("redis-database-plugin")},
-			"remote-valkey-plugin":       {Factory: dbRemote.New("valkey-database-plugin")},
-			"remote-qdrant-plugin":       {Factory: dbRemote.New("qdrant-database-plugin")},
+			"cassandra-database-plugin":     {Factory: dbCass.New},
+			"druid-database-plugin":         {Factory: dbDruid.New},
+			"elasticsearch-database-plugin": {Factory: dbES.New},
+			"hana-database-plugin":          {Factory: dbHana.New},
+			"ignite-database-plugin":        {Factory: dbIgnite.New},
+			"influxdb-database-plugin":      {Factory: dbInflux.New},
+			"kafka-database-plugin":         {Factory: dbKafka.New},
+			"milvus-database-plugin":        {Factory: dbMilvus.New},
+			"mongodb-database-plugin":       {Factory: dbMongo.New},
+			"mssql-database-plugin":         {Factory: dbMSSQL.New},
+			"neo4j-database-plugin":         {Factory: dbNeo4j.New},
+			"oracle-database-plugin":        {Factory: dbOracle.New},
+			"postgresql-database-plugin":    {Factory: dbPostgres.New},
+			"qdrant-database-plugin":        {Factory: dbQdrant.New},
+			"rabbitmq-database-plugin":      {Factory: dbRabbitmq.New},
+			"redis-database-plugin":         {Factory: dbValkey.New},
+			"solr-database-plugin":          {Factory: dbSolr.New},
+			"valkey-database-plugin":        {Factory: dbValkey.New},
+			"remote-cassandra-plugin":       {Factory: dbRemote.New("cassandra-database-plugin")},
+			"remote-druid-plugin":           {Factory: dbRemote.New("druid-database-plugin")},
+			"remote-elasticsearch-plugin":   {Factory: dbRemote.New("elasticsearch-database-plugin")},
+			"remote-hana-plugin":            {Factory: dbRemote.New("hana-database-plugin")},
+			"remote-ignite-plugin":          {Factory: dbRemote.New("ignite-database-plugin")},
+			"remote-influxdb-plugin":        {Factory: dbRemote.New("influxdb-database-plugin")},
+			"remote-kafka-plugin":           {Factory: dbRemote.New("kafka-database-plugin")},
+			"remote-milvus-plugin":          {Factory: dbRemote.New("milvus-database-plugin")},
+			"remote-mongodb-plugin":         {Factory: dbRemote.New("mongodb-database-plugin")},
+			"remote-mssql-plugin":           {Factory: dbRemote.New("mssql-database-plugin")},
+			"remote-mysql-plugin":           {Factory: dbRemote.New("mysql-database-plugin")},
+			"remote-neo4j-plugin":           {Factory: dbRemote.New("neo4j-database-plugin")},
+			"remote-oracle-plugin":          {Factory: dbRemote.New("oracle-database-plugin")},
+			"remote-postgres-plugin":        {Factory: dbRemote.New("postgresql-database-plugin")},
+			"remote-qdrant-plugin":          {Factory: dbRemote.New("qdrant-database-plugin")},
+			"remote-rabbitmq-plugin":        {Factory: dbRemote.New("rabbitmq-database-plugin")},
+			"remote-redis-plugin":           {Factory: dbRemote.New("redis-database-plugin")},
+			"remote-solr-plugin":            {Factory: dbRemote.New("solr-database-plugin")},
+			"remote-valkey-plugin":          {Factory: dbRemote.New("valkey-database-plugin")},
 		},
 		logicalBackends: map[string]logicalBackend{
 			"kubernetes": {Factory: logicalKube.Factory},
@@ -101,7 +136,6 @@ func newRegistry() *registry {
 			"openldap":   {Factory: logicalLDAP.Factory},
 			"ldap":       {Factory: logicalLDAP.Factory},
 			"pki":        {Factory: logicalPki.Factory},
-			"rabbitmq":   {Factory: logicalRabbit.Factory},
 			"relay":      {Factory: logicalRelay.Factory},
 			"ssh":        {Factory: logicalSsh.Factory},
 			"totp":       {Factory: logicalTotp.Factory},
