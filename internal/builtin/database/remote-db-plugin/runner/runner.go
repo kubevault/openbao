@@ -29,6 +29,7 @@ import (
 
 	dbplugin "github.com/openbao/openbao/sdk/v2/database/dbplugin/v5"
 	dbCassandra "github.com/openbao/openbao/v2/internal/builtin/database/cassandra"
+	dbDruid "github.com/openbao/openbao/v2/internal/builtin/database/druid"
 	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
 	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
@@ -410,6 +411,8 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbCassandra.New
 	case "influxdb-database-plugin":
 		factory = dbInflux.New
+	case "druid-database-plugin":
+		factory = dbDruid.New
 	case "elasticsearch-database-plugin":
 		factory = dbES.New
 	case "hana-database-plugin":
