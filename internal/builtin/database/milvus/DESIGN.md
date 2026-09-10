@@ -28,36 +28,61 @@ Built-in and remote variants are both registered.
 
 ## Creation statement
 
+`creation_statements` can be a JSON object specifying pre-existing roles and/or custom role definitions:
+
 ```json
-{"roles": ["public"]}
+{
+  "roles": ["public"],
+  "custom_roles": [
+    {
+      "name": "collection_reader",
+      "privileges": [
+        {
+          "object_type": "Collection",
+          "object_name": "Products",
+          "privilege": "Search",
+          "db_name": "default"
+        }
+      ]
+    }
+  ]
+}
 ```
 
-Roles must already exist on the cluster.
+Aliases are supported:
+- Custom roles: `custom_roles` or `customRoles`.
+- Role definitions: `privileges` or `permissions`.
+- Privileges: `object_type` / `objectType` / `type`, `object_name` / `objectName` / `object` / `collection`, `privilege` / `action` / `permission`, `db_name` / `dbName` / `database`.
+- Object types: `Collection`, `Global` (default if object is `*` or empty), `User`.
+
+Single custom role JSON objects, JSON arrays, and comma-separated role name strings are also supported.
 
 ## Lifecycle
 
 ### NewUser
 
-- Calls `client.CreateCredential(ctx, username, password)`
-- For each role in `creation_statements`, calls `client.AddUserRole(ctx, username, role)`
-- If `AddUserRole` fails, the plugin calls `client.DeleteCredential(ctx, username)` to clean up partially created user.
+- Ensures custom roles exist via `client.CreateRole(ctx, role.Name)` and grants their privileges via `client.Grant(ctx, ...)`.
+- Calls `client.CreateCredential(ctx, username, password)`.
+- For each role in `creation_statements`, calls `client.AddUserRole(ctx, username, role)`.
+- If `AddUserRole` fails, the plugin calls `client.DeleteCredential(ctx, username)` to clean up the partially created user.
 
 ### UpdateUser
 
-- Calls `client.UpdateCredential(ctx, username, "", newPassword)`
+- No-op. Milvus requires the user's old password to rotate credentials unless `common.security.superUsers` is configured. Because OpenBao does not retain previously-generated dynamic passwords, `UpdateUser` returns success without modifying credentials to prevent rotation errors.
 
 ### DeleteUser
 
-- Calls `client.DeleteCredential(ctx, username)`
+- Calls `client.DeleteCredential(ctx, username)`.
 
 ## Tests
 
 Always-on unit tests run against an in-memory gRPC server implementing `milvuspb.MilvusServiceServer` (`fakeMilvusServer`).
 Tests cover:
 - Type and version reporting
-- Statement JSON parsing
-- Full credential lifecycle (`CreateCredential`, `AddUserRole`, `UpdateCredential`, `DeleteCredential`)
+- Statement JSON parsing with custom roles and aliases
+- Full credential lifecycle (`CreateCredential`, `AddUserRole`, no-op `UpdateCredential`, `DeleteCredential`)
+- Custom roles creation and privilege grants
+- Validation and error handling
 - Role grant failure and automatic cleanup of partially created credentials
-- Error handling
 
 Acceptance tests are gated on `BAO_ACC=1` + `MILVUS_URL`.

@@ -13,10 +13,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/hashicorp/go-secure-stdlib/strutil"
+	"github.com/milvus-io/milvus-proto/go-api/v2/commonpb"
 	milvusclient "github.com/milvus-io/milvus-sdk-go/v2/client"
+	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 	"github.com/mitchellh/mapstructure"
 	dbplugin "github.com/openbao/openbao/sdk/v2/database/dbplugin/v5"
 	"github.com/openbao/openbao/sdk/v2/database/helper/dbutil"
@@ -61,8 +64,115 @@ type milvusConfig struct {
 	Insecure   bool   `mapstructure:"insecure"`
 }
 
+// milvusStatement represents a structured creation statement containing
+// built-in/existing roles and/or custom role definitions.
 type milvusStatement struct {
-	Roles []string `json:"roles"`
+	Roles       []string        `json:"roles"`
+	CustomRoles []milvusRoleDef `json:"custom_roles"`
+}
+
+func (s *milvusStatement) UnmarshalJSON(data []byte) error {
+	type Alias milvusStatement
+	aux := &struct {
+		*Alias
+		SingleRole     string          `json:"role"`
+		AltCustomRoles []milvusRoleDef `json:"customRoles"`
+	}{
+		Alias: (*Alias)(s),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if len(s.Roles) == 0 && aux.SingleRole != "" {
+		s.Roles = []string{aux.SingleRole}
+	}
+	if len(s.CustomRoles) == 0 && len(aux.AltCustomRoles) > 0 {
+		s.CustomRoles = aux.AltCustomRoles
+	}
+	return nil
+}
+
+// milvusRoleDef represents a custom role definition in Milvus.
+type milvusRoleDef struct {
+	Name       string            `json:"name"`
+	Privileges []milvusPrivilege `json:"privileges"`
+}
+
+func (r *milvusRoleDef) UnmarshalJSON(data []byte) error {
+	type Alias milvusRoleDef
+	aux := &struct {
+		*Alias
+		AltPrivileges []milvusPrivilege `json:"permissions"`
+	}{
+		Alias: (*Alias)(r),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if len(r.Privileges) == 0 && len(aux.AltPrivileges) > 0 {
+		r.Privileges = aux.AltPrivileges
+	}
+	return nil
+}
+
+// milvusPrivilege represents a privilege grant for a custom role in Milvus.
+type milvusPrivilege struct {
+	ObjectType string `json:"object_type"`
+	ObjectName string `json:"object_name"`
+	Privilege  string `json:"privilege"`
+	DBName     string `json:"db_name"`
+}
+
+func (p *milvusPrivilege) UnmarshalJSON(data []byte) error {
+	type Alias milvusPrivilege
+	aux := &struct {
+		*Alias
+		AltObjectType string `json:"objectType"`
+		Type          string `json:"type"`
+		AltObjectName string `json:"objectName"`
+		Object        string `json:"object"`
+		Collection    string `json:"collection"`
+		Action        string `json:"action"`
+		Permission    string `json:"permission"`
+		AltDBName     string `json:"dbName"`
+		Database      string `json:"database"`
+	}{
+		Alias: (*Alias)(p),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if p.ObjectType == "" {
+		if aux.AltObjectType != "" {
+			p.ObjectType = aux.AltObjectType
+		} else if aux.Type != "" {
+			p.ObjectType = aux.Type
+		}
+	}
+	if p.ObjectName == "" {
+		if aux.AltObjectName != "" {
+			p.ObjectName = aux.AltObjectName
+		} else if aux.Object != "" {
+			p.ObjectName = aux.Object
+		} else if aux.Collection != "" {
+			p.ObjectName = aux.Collection
+		}
+	}
+	if p.Privilege == "" {
+		if aux.Action != "" {
+			p.Privilege = aux.Action
+		} else if aux.Permission != "" {
+			p.Privilege = aux.Permission
+		}
+	}
+	if p.DBName == "" {
+		if aux.AltDBName != "" {
+			p.DBName = aux.AltDBName
+		} else if aux.Database != "" {
+			p.DBName = aux.Database
+		}
+	}
+	return nil
 }
 
 var (
@@ -223,20 +333,104 @@ func newMilvusClientConfig(cfg *milvusConfig) (*milvusclient.Config, error) {
 	return clientConfig, nil
 }
 
-// NewUser creates the user, then grants each role from the statement. If
-// a grant fails the plugin drops the half-configured user.
+// NewUser creates the user, ensures custom roles and their privileges exist,
+// and then grants each role from the statement(s) to the user. If
+// any grant fails the plugin drops the half-configured user.
 func (m *Milvus) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbplugin.NewUserResponse, error) {
 	if len(req.Statements.Commands) == 0 {
 		return dbplugin.NewUserResponse{}, dbutil.ErrEmptyCreationStatement
 	}
 
-	var stmt milvusStatement
-	if err := json.Unmarshal([]byte(req.Statements.Commands[0]), &stmt); err != nil {
-		return dbplugin.NewUserResponse{}, fmt.Errorf("creation_statements must be a JSON role doc: %w", err)
-	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.client == nil {
+		return dbplugin.NewUserResponse{}, errors.New("database not initialized")
+	}
+
+	var rolesToAssign []string
+	for _, cmd := range req.Statements.Commands {
+		cmd = strings.TrimSpace(cmd)
+		if cmd == "" {
+			continue
+		}
+
+		// Structured JSON statement: {"roles": [...], "custom_roles": [...]}
+		if strings.HasPrefix(cmd, "{") {
+			var stmt milvusStatement
+			if err := json.Unmarshal([]byte(cmd), &stmt); err == nil && (len(stmt.Roles) > 0 || len(stmt.CustomRoles) > 0 || strings.Contains(cmd, `"roles"`) || strings.Contains(cmd, `"custom_roles"`)) {
+				for _, r := range stmt.Roles {
+					if r = strings.TrimSpace(r); r != "" {
+						rolesToAssign = append(rolesToAssign, r)
+					}
+				}
+				for _, cr := range stmt.CustomRoles {
+					if cr.Name == "" {
+						return dbplugin.NewUserResponse{}, errors.New("custom role definition missing name")
+					}
+					if err := m.ensureRole(ctx, cr); err != nil {
+						return dbplugin.NewUserResponse{}, err
+					}
+					rolesToAssign = append(rolesToAssign, cr.Name)
+				}
+				continue
+			}
+
+			// Single custom role JSON definition: {"name": "...", "privileges": [...]}
+			var roleDef milvusRoleDef
+			if err := json.Unmarshal([]byte(cmd), &roleDef); err == nil && roleDef.Name != "" {
+				if err := m.ensureRole(ctx, roleDef); err != nil {
+					return dbplugin.NewUserResponse{}, err
+				}
+				rolesToAssign = append(rolesToAssign, roleDef.Name)
+				continue
+			}
+
+			return dbplugin.NewUserResponse{}, fmt.Errorf("failed to parse role statement JSON: %q", cmd)
+		}
+
+		// Array of roles or custom role definitions: ["public"] or [{"name": "..."}]
+		if strings.HasPrefix(cmd, "[") {
+			var strRoles []string
+			if err := json.Unmarshal([]byte(cmd), &strRoles); err == nil && len(strRoles) > 0 {
+				for _, r := range strRoles {
+					if r = strings.TrimSpace(r); r != "" {
+						rolesToAssign = append(rolesToAssign, r)
+					}
+				}
+				continue
+			}
+
+			var roleDefs []milvusRoleDef
+			if err := json.Unmarshal([]byte(cmd), &roleDefs); err == nil && len(roleDefs) > 0 {
+				for _, rd := range roleDefs {
+					if rd.Name == "" {
+						return dbplugin.NewUserResponse{}, errors.New("custom role definition missing name")
+					}
+					if err := m.ensureRole(ctx, rd); err != nil {
+						return dbplugin.NewUserResponse{}, err
+					}
+					rolesToAssign = append(rolesToAssign, rd.Name)
+				}
+				continue
+			}
+
+			return dbplugin.NewUserResponse{}, fmt.Errorf("failed to parse role statement JSON array: %q", cmd)
+		}
+
+		// Plain role name string (e.g. "public", or comma-separated "public, admin")
+		if strings.Contains(cmd, ",") {
+			for _, part := range strings.Split(cmd, ",") {
+				if part = strings.TrimSpace(part); part != "" {
+					rolesToAssign = append(rolesToAssign, part)
+				}
+			}
+		} else {
+			rolesToAssign = append(rolesToAssign, cmd)
+		}
+	}
+
+	rolesToAssign = deduplicateStrings(rolesToAssign)
 
 	username, err := m.usernameProducer.Generate(req.UsernameConfig)
 	if err != nil {
@@ -247,10 +441,7 @@ func (m *Milvus) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbpl
 		return dbplugin.NewUserResponse{}, fmt.Errorf("failed to create Milvus user: %w", err)
 	}
 
-	for _, role := range stmt.Roles {
-		if role == "" {
-			continue
-		}
+	for _, role := range rolesToAssign {
 		if err := m.client.AddUserRole(ctx, username, role); err != nil {
 			if cleanupErr := m.client.DeleteCredential(ctx, username); cleanupErr != nil {
 				return dbplugin.NewUserResponse{}, fmt.Errorf("failed to grant role %q: %w; failed to remove partially created user: %v", role, err, cleanupErr)
@@ -262,35 +453,120 @@ func (m *Milvus) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbpl
 	return dbplugin.NewUserResponse{Username: username}, nil
 }
 
-func (m *Milvus) UpdateUser(ctx context.Context, req dbplugin.UpdateUserRequest) (dbplugin.UpdateUserResponse, error) {
+// UpdateUser handles user updates. Milvus requires the user's old password to
+// update credentials unless common.security.superUsers is configured. Because
+// OpenBao does not retain previously-generated dynamic passwords, password
+// update is a no-op to prevent credential rotation failures.
+func (m *Milvus) UpdateUser(_ context.Context, req dbplugin.UpdateUserRequest) (dbplugin.UpdateUserResponse, error) {
 	if req.Username == "" {
 		return dbplugin.UpdateUserResponse{}, errors.New("missing username")
 	}
 	if req.Password == nil && req.Expiration == nil {
 		return dbplugin.UpdateUserResponse{}, errors.New("no changes requested")
 	}
-	if req.Password == nil {
-		return dbplugin.UpdateUserResponse{}, nil
-	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// OpenBao does not retain or provide the managed user's previous password.
-	// Milvus permits a configured superuser to reset another user's password
-	// without verifying the old password, so leave oldPassword empty here.
-	if err := m.client.UpdateCredential(ctx, req.Username, "", req.Password.NewPassword); err != nil {
-		return dbplugin.UpdateUserResponse{}, fmt.Errorf("failed to update Milvus user password: %w", err)
+	if m.client == nil {
+		return dbplugin.UpdateUserResponse{}, errors.New("database not initialized")
 	}
+
 	return dbplugin.UpdateUserResponse{}, nil
 }
 
 func (m *Milvus) DeleteUser(ctx context.Context, req dbplugin.DeleteUserRequest) (dbplugin.DeleteUserResponse, error) {
+	if req.Username == "" {
+		return dbplugin.DeleteUserResponse{}, errors.New("missing username")
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	if m.client == nil {
+		return dbplugin.DeleteUserResponse{}, errors.New("database not initialized")
+	}
 
 	if err := m.client.DeleteCredential(ctx, req.Username); err != nil {
 		return dbplugin.DeleteUserResponse{}, fmt.Errorf("failed to delete Milvus user: %w", err)
 	}
 	return dbplugin.DeleteUserResponse{}, nil
+}
+
+func (m *Milvus) ensureRole(ctx context.Context, role milvusRoleDef) error {
+	role.Name = strings.TrimSpace(role.Name)
+	if role.Name == "" {
+		return errors.New("custom role definition missing name")
+	}
+
+	if err := m.client.CreateRole(ctx, role.Name); err != nil {
+		if !strings.Contains(strings.ToLower(err.Error()), "already exist") {
+			return fmt.Errorf("failed to create role %q: %w", role.Name, err)
+		}
+	}
+
+	for _, p := range role.Privileges {
+		privilege := strings.TrimSpace(p.Privilege)
+		if privilege == "" {
+			return fmt.Errorf("role %q privilege missing privilege/action name", role.Name)
+		}
+
+		objName := strings.TrimSpace(p.ObjectName)
+		objType, err := parseObjectType(p.ObjectType, objName)
+		if err != nil {
+			return fmt.Errorf("role %q: %w", role.Name, err)
+		}
+
+		if objName == "" {
+			objName = "*"
+		}
+
+		var opts []entity.OperatePrivilegeOption
+		dbName := strings.TrimSpace(p.DBName)
+		if dbName != "" {
+			opts = append(opts, entity.WithOperatePrivilegeDatabase(dbName))
+		}
+
+		if err := m.client.Grant(ctx, role.Name, objType, objName, privilege, opts...); err != nil {
+			errStr := strings.ToLower(err.Error())
+			if !strings.Contains(errStr, "already exist") && !strings.Contains(errStr, "already granted") {
+				return fmt.Errorf("failed to grant privilege %q on %s %q to role %q: %w", privilege, commonpb.ObjectType_name[int32(objType)], objName, role.Name, err)
+			}
+		}
+	}
+	return nil
+}
+
+func parseObjectType(raw string, objectName string) (entity.PriviledgeObjectType, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "global":
+		return entity.PriviledegeObjectTypeGlobal, nil
+	case "collection", "collections":
+		return entity.PriviledegeObjectTypeCollection, nil
+	case "user", "users":
+		return entity.PriviledegeObjectTypeUser, nil
+	case "":
+		if objectName == "*" || objectName == "" {
+			return entity.PriviledegeObjectTypeGlobal, nil
+		}
+		return entity.PriviledegeObjectTypeCollection, nil
+	default:
+		return 0, fmt.Errorf("unknown privilege object type: %q (expected Global, Collection, or User)", raw)
+	}
+}
+
+func deduplicateStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	var out []string
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			out = append(out, s)
+		}
+	}
+	return out
 }
