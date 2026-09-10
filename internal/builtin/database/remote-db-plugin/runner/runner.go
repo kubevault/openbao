@@ -29,9 +29,22 @@ import (
 
 	dbplugin "github.com/openbao/openbao/sdk/v2/database/dbplugin/v5"
 	dbCassandra "github.com/openbao/openbao/v2/internal/builtin/database/cassandra"
+	dbDruid "github.com/openbao/openbao/v2/internal/builtin/database/druid"
+	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
+	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
+	dbIgnite "github.com/openbao/openbao/v2/internal/builtin/database/ignite"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
+	dbKafka "github.com/openbao/openbao/v2/internal/builtin/database/kafka"
+	dbMilvus "github.com/openbao/openbao/v2/internal/builtin/database/milvus"
+	dbMongo "github.com/openbao/openbao/v2/internal/builtin/database/mongodb"
+	dbMSSQL "github.com/openbao/openbao/v2/internal/builtin/database/mssql"
 	dbMySQL "github.com/openbao/openbao/v2/internal/builtin/database/mysql"
+	dbNeo4j "github.com/openbao/openbao/v2/internal/builtin/database/neo4j"
+	dbOracle "github.com/openbao/openbao/v2/internal/builtin/database/oracle"
 	dbPostgres "github.com/openbao/openbao/v2/internal/builtin/database/postgresql"
+	dbQdrant "github.com/openbao/openbao/v2/internal/builtin/database/qdrant"
+	dbRabbitmq "github.com/openbao/openbao/v2/internal/builtin/database/rabbitmq"
+	dbSolr "github.com/openbao/openbao/v2/internal/builtin/database/solr"
 	dbValkey "github.com/openbao/openbao/v2/internal/builtin/database/valkey"
 	dbWeaviate "github.com/openbao/openbao/v2/internal/builtin/database/weaviate"
 )
@@ -403,6 +416,32 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbCassandra.New
 	case "influxdb-database-plugin":
 		factory = dbInflux.New
+	case "druid-database-plugin":
+		factory = dbDruid.New
+	case "elasticsearch-database-plugin":
+		factory = dbES.New
+	case "hana-database-plugin":
+		factory = dbHana.New
+	case "ignite-database-plugin":
+		factory = dbIgnite.New
+	case "kafka-database-plugin":
+		factory = dbKafka.New
+	case "milvus-database-plugin":
+		factory = dbMilvus.New
+	case "mongodb-database-plugin":
+		factory = dbMongo.New
+	case "mssql-database-plugin":
+		factory = dbMSSQL.New
+	case "neo4j-database-plugin":
+		factory = dbNeo4j.New
+	case "oracle-database-plugin":
+		factory = dbOracle.New
+	case "qdrant-database-plugin":
+		factory = dbQdrant.New
+	case "rabbitmq-database-plugin":
+		factory = dbRabbitmq.New
+	case "solr-database-plugin":
+		factory = dbSolr.New
 	case "weaviate-database-plugin":
 		factory = dbWeaviate.New
 	default:
