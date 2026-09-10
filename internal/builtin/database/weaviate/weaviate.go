@@ -199,8 +199,30 @@ func (w *Weaviate) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (db
 			continue
 		}
 
-		// Single custom role JSON definition
+		// Structured JSON statement: {"roles": [...], "custom_roles": [...]}
 		if strings.HasPrefix(cmd, "{") {
+			var stmt weaviateStatement
+			if err := json.Unmarshal([]byte(cmd), &stmt); err == nil && (len(stmt.Roles) > 0 || len(stmt.CustomRoles) > 0) {
+				for _, r := range stmt.Roles {
+					if r = strings.TrimSpace(r); r != "" {
+						rolesToAssign = append(rolesToAssign, r)
+					}
+				}
+				for _, cr := range stmt.CustomRoles {
+					if cr.Name == "" {
+						_ = w.deleteUser(ctx, username)
+						return dbplugin.NewUserResponse{}, errors.New("custom role definition missing name")
+					}
+					if err := w.ensureRole(ctx, cr); err != nil {
+						_ = w.deleteUser(ctx, username)
+						return dbplugin.NewUserResponse{}, err
+					}
+					rolesToAssign = append(rolesToAssign, cr.Name)
+				}
+				continue
+			}
+
+			// Backwards compatibility: Single custom role JSON definition
 			var roleDef weaviateRoleDef
 			if err := json.Unmarshal([]byte(cmd), &roleDef); err == nil && roleDef.Name != "" {
 				if err := w.ensureRole(ctx, roleDef); err != nil {
@@ -210,15 +232,29 @@ func (w *Weaviate) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (db
 				rolesToAssign = append(rolesToAssign, roleDef.Name)
 				continue
 			}
+
+			_ = w.deleteUser(ctx, username)
+			return dbplugin.NewUserResponse{}, fmt.Errorf("failed to parse role statement JSON: %q", cmd)
 		}
 
-		// Array of custom role JSON definitions
+		// Array of roles or custom role definitions: ["viewer"] or [{"name": "..."}]
 		if strings.HasPrefix(cmd, "[") {
+			var strRoles []string
+			if err := json.Unmarshal([]byte(cmd), &strRoles); err == nil && len(strRoles) > 0 {
+				for _, r := range strRoles {
+					if r = strings.TrimSpace(r); r != "" {
+						rolesToAssign = append(rolesToAssign, r)
+					}
+				}
+				continue
+			}
+
 			var roleDefs []weaviateRoleDef
 			if err := json.Unmarshal([]byte(cmd), &roleDefs); err == nil && len(roleDefs) > 0 {
 				for _, rd := range roleDefs {
 					if rd.Name == "" {
-						continue
+						_ = w.deleteUser(ctx, username)
+						return dbplugin.NewUserResponse{}, errors.New("custom role definition missing name")
 					}
 					if err := w.ensureRole(ctx, rd); err != nil {
 						_ = w.deleteUser(ctx, username)
@@ -228,6 +264,9 @@ func (w *Weaviate) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (db
 				}
 				continue
 			}
+
+			_ = w.deleteUser(ctx, username)
+			return dbplugin.NewUserResponse{}, fmt.Errorf("failed to parse role statement JSON array: %q", cmd)
 		}
 
 		// Plain role name string (e.g. "viewer", or comma-separated "viewer, admin")
@@ -312,6 +351,34 @@ func (w *Weaviate) deleteUser(ctx context.Context, username string) error {
 		return nil
 	}
 	return fmt.Errorf("failed to delete user %q: %w", username, formatWeaviateError(resp.Status, body))
+}
+
+// weaviateStatement represents a structured creation statement containing
+// built-in/existing roles and/or custom role definitions.
+type weaviateStatement struct {
+	Roles       []string          `json:"roles"`
+	CustomRoles []weaviateRoleDef `json:"custom_roles"`
+}
+
+func (s *weaviateStatement) UnmarshalJSON(data []byte) error {
+	type Alias weaviateStatement
+	aux := &struct {
+		*Alias
+		SingleRole     string            `json:"role"`
+		AltCustomRoles []weaviateRoleDef `json:"customRoles"`
+	}{
+		Alias: (*Alias)(s),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if len(s.Roles) == 0 && aux.SingleRole != "" {
+		s.Roles = []string{aux.SingleRole}
+	}
+	if len(s.CustomRoles) == 0 && len(aux.AltCustomRoles) > 0 {
+		s.CustomRoles = aux.AltCustomRoles
+	}
+	return nil
 }
 
 // weaviateRoleDef represents a custom role definition in Weaviate.

@@ -17,7 +17,9 @@ via Weaviate's User Management and RBAC REST APIs:
 - `NewUser` generates a unique username, creates the user via
   `POST /v1/users/db/{user_id}`, assigns roles configured in the role's
   creation statements via `POST /v1/authz/users/{id}/assign`, and returns
-  Weaviate's generated API key in `NewUserResponse.Password`.
+  Weaviate's generated API key in `NewUserResponse.Password`. Creation statements
+  support structured JSON objects (`roles` and `custom_roles`), arrays of role names,
+  or comma-separated strings.
 - `UpdateUser` validates requests but rejects password updates and static credentials because server-generated API keys cannot be returned via the v5 update response.
 - `DeleteUser` deletes the database user via `DELETE /v1/users/db/{user_id}`.
 

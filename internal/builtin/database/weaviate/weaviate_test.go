@@ -226,6 +226,271 @@ func TestWeaviate_NewUser_CustomRoles(t *testing.T) {
 	mu.Unlock()
 }
 
+func TestWeaviate_NewUser_StructuredRoles(t *testing.T) {
+	var mu sync.Mutex
+	var createdRoles []string
+	var assignedRoles []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/.well-known/ready":
+			w.WriteHeader(http.StatusOK)
+
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/authz/roles":
+			var role struct {
+				Name string `json:"name"`
+			}
+			b, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(b, &role)
+			createdRoles = append(createdRoles, role.Name)
+			w.WriteHeader(http.StatusCreated)
+
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/users/db/"):
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"apikey": "test-key"})
+
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/authz/users/") && strings.HasSuffix(r.URL.Path, "/assign"):
+			var body struct {
+				Roles []string `json:"roles"`
+			}
+			b, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(b, &body)
+			assignedRoles = body.Roles
+			w.WriteHeader(http.StatusOK)
+
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	db := newWeaviate()
+	_, err := db.Initialize(context.Background(), dbplugin.InitializeRequest{
+		Config: map[string]any{
+			"url":     srv.URL,
+			"api_key": "test",
+		},
+		VerifyConnection: true,
+	})
+	require.NoError(t, err)
+	defer db.Close() //nolint:errcheck
+
+	t.Run("roles and custom_roles in single JSON object", func(t *testing.T) {
+		mu.Lock()
+		createdRoles = nil
+		assignedRoles = nil
+		mu.Unlock()
+
+		stmt := `{
+			"roles": ["viewer"],
+			"custom_roles": [
+				{
+					"name": "customrole",
+					"permissions": [
+						{"action": "read_data", "collections": {"collection": "Products"}},
+						{"action": "create_data", "collections": {"collection": "Products"}}
+					]
+				}
+			]
+		}`
+		req := dbplugin.NewUserRequest{
+			UsernameConfig: dbplugin.UsernameMetadata{RoleName: "app"},
+			Statements:     dbplugin.Statements{Commands: []string{stmt}},
+		}
+		resp, err := db.NewUser(context.Background(), req)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Username)
+
+		mu.Lock()
+		require.Equal(t, []string{"customrole"}, createdRoles)
+		require.Equal(t, []string{"viewer", "customrole"}, assignedRoles)
+		mu.Unlock()
+	})
+
+	t.Run("roles only JSON object", func(t *testing.T) {
+		mu.Lock()
+		createdRoles = nil
+		assignedRoles = nil
+		mu.Unlock()
+
+		stmt := `{"roles": ["viewer", "editor"]}`
+		req := dbplugin.NewUserRequest{
+			UsernameConfig: dbplugin.UsernameMetadata{RoleName: "app"},
+			Statements:     dbplugin.Statements{Commands: []string{stmt}},
+		}
+		resp, err := db.NewUser(context.Background(), req)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Username)
+
+		mu.Lock()
+		require.Empty(t, createdRoles)
+		require.Equal(t, []string{"viewer", "editor"}, assignedRoles)
+		mu.Unlock()
+	})
+
+	t.Run("custom_roles only JSON object", func(t *testing.T) {
+		mu.Lock()
+		createdRoles = nil
+		assignedRoles = nil
+		mu.Unlock()
+
+		stmt := `{"custom_roles": [{"name": "writer", "permissions": [{"action": "create_data"}]}]}`
+		req := dbplugin.NewUserRequest{
+			UsernameConfig: dbplugin.UsernameMetadata{RoleName: "app"},
+			Statements:     dbplugin.Statements{Commands: []string{stmt}},
+		}
+		resp, err := db.NewUser(context.Background(), req)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Username)
+
+		mu.Lock()
+		require.Equal(t, []string{"writer"}, createdRoles)
+		require.Equal(t, []string{"writer"}, assignedRoles)
+		mu.Unlock()
+	})
+
+	t.Run("JSON array of string role names", func(t *testing.T) {
+		mu.Lock()
+		createdRoles = nil
+		assignedRoles = nil
+		mu.Unlock()
+
+		stmt := `["viewer", "admin"]`
+		req := dbplugin.NewUserRequest{
+			UsernameConfig: dbplugin.UsernameMetadata{RoleName: "app"},
+			Statements:     dbplugin.Statements{Commands: []string{stmt}},
+		}
+		resp, err := db.NewUser(context.Background(), req)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Username)
+
+		mu.Lock()
+		require.Empty(t, createdRoles)
+		require.Equal(t, []string{"viewer", "admin"}, assignedRoles)
+		mu.Unlock()
+	})
+
+	t.Run("camelCase customRoles and role aliases", func(t *testing.T) {
+		mu.Lock()
+		createdRoles = nil
+		assignedRoles = nil
+		mu.Unlock()
+
+		stmt := `{"role": "viewer", "customRoles": [{"name": "analyst"}]}`
+		req := dbplugin.NewUserRequest{
+			UsernameConfig: dbplugin.UsernameMetadata{RoleName: "app"},
+			Statements:     dbplugin.Statements{Commands: []string{stmt}},
+		}
+		resp, err := db.NewUser(context.Background(), req)
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Username)
+
+		mu.Lock()
+		require.Equal(t, []string{"analyst"}, createdRoles)
+		require.Equal(t, []string{"viewer", "analyst"}, assignedRoles)
+		mu.Unlock()
+	})
+}
+
+func TestWeaviate_NewUser_InvalidStatements(t *testing.T) {
+	var mu sync.Mutex
+	var createdUsers []string
+	var deletedUsers []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/.well-known/ready":
+			w.WriteHeader(http.StatusOK)
+
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/users/db/"):
+			user := strings.TrimPrefix(r.URL.Path, "/v1/users/db/")
+			createdUsers = append(createdUsers, user)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"apikey": "test-key"})
+
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/v1/users/db/"):
+			user := strings.TrimPrefix(r.URL.Path, "/v1/users/db/")
+			deletedUsers = append(deletedUsers, user)
+			w.WriteHeader(http.StatusNoContent)
+
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	db := newWeaviate()
+	_, err := db.Initialize(context.Background(), dbplugin.InitializeRequest{
+		Config: map[string]any{
+			"url":     srv.URL,
+			"api_key": "test",
+		},
+		VerifyConnection: true,
+	})
+	require.NoError(t, err)
+	defer db.Close() //nolint:errcheck
+
+	testCases := []struct {
+		name        string
+		command     string
+		errContains string
+	}{
+		{
+			name:        "invalid JSON object schema",
+			command:     `{"unrecognized": "value"}`,
+			errContains: "failed to parse role statement JSON",
+		},
+		{
+			name:        "malformed JSON object",
+			command:     `{not valid json`,
+			errContains: "failed to parse role statement JSON",
+		},
+		{
+			name:        "malformed JSON array",
+			command:     `[not valid json`,
+			errContains: "failed to parse role statement JSON array",
+		},
+		{
+			name:        "custom role missing name in custom_roles",
+			command:     `{"custom_roles": [{"permissions": [{"action": "read_data"}]}]}`,
+			errContains: "custom role definition missing name",
+		},
+		{
+			name:        "custom role missing name in array",
+			command:     `[{"permissions": [{"action": "read_data"}]}]`,
+			errContains: "custom role definition missing name",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mu.Lock()
+			createdUsers = nil
+			deletedUsers = nil
+			mu.Unlock()
+
+			req := dbplugin.NewUserRequest{
+				UsernameConfig: dbplugin.UsernameMetadata{RoleName: "app"},
+				Statements:     dbplugin.Statements{Commands: []string{tc.command}},
+			}
+			_, err := db.NewUser(context.Background(), req)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.errContains)
+
+			mu.Lock()
+			require.Len(t, createdUsers, 1)
+			require.Equal(t, createdUsers, deletedUsers, "created user must be cleaned up on error")
+			mu.Unlock()
+		})
+	}
+}
+
 func TestWeaviate_UsernameTemplate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
