@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-secure-stdlib/parseutil"
 	"github.com/hashicorp/go-secure-stdlib/strutil"
 	"github.com/mitchellh/mapstructure"
 	dbplugin "github.com/openbao/openbao/sdk/v2/database/dbplugin/v5"
@@ -114,7 +115,7 @@ func (e *Etcd) Initialize(ctx context.Context, req dbplugin.InitializeRequest) (
 
 	dialTimeout := defaultDialTimeout
 	if cfg.DialTimeout != "" {
-		d, err := time.ParseDuration(cfg.DialTimeout)
+		d, err := parseutil.ParseDurationSecond(cfg.DialTimeout)
 		if err != nil {
 			return dbplugin.InitializeResponse{}, fmt.Errorf("invalid dial_timeout: %w", err)
 		}
@@ -148,7 +149,7 @@ func (e *Etcd) Initialize(ctx context.Context, req dbplugin.InitializeRequest) (
 
 	usernameTemplate, err := strutil.GetString(req.Config, "username_template")
 	if err != nil {
-		cli.Close()
+		_ = cli.Close()
 		return dbplugin.InitializeResponse{}, err
 	}
 	if usernameTemplate == "" {
@@ -156,11 +157,11 @@ func (e *Etcd) Initialize(ctx context.Context, req dbplugin.InitializeRequest) (
 	}
 	up, err := template.NewTemplate(template.Template(usernameTemplate))
 	if err != nil {
-		cli.Close()
+		_ = cli.Close()
 		return dbplugin.InitializeResponse{}, fmt.Errorf("invalid username_template: %w", err)
 	}
 	if _, err := up.Generate(dbplugin.UsernameMetadata{}); err != nil {
-		cli.Close()
+		_ = cli.Close()
 		return dbplugin.InitializeResponse{}, fmt.Errorf("invalid username template: %w", err)
 	}
 
@@ -175,7 +176,7 @@ func (e *Etcd) Initialize(ctx context.Context, req dbplugin.InitializeRequest) (
 		verifyCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 		defer cancel()
 		if _, err := cli.AuthStatus(verifyCtx); err != nil {
-			cli.Close()
+			_ = cli.Close()
 			e.client = nil
 			return dbplugin.InitializeResponse{}, fmt.Errorf("failed to verify connection: %w", err)
 		}
