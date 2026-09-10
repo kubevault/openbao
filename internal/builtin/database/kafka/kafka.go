@@ -507,7 +507,7 @@ func checkDeleteACLResults(results kadm.DeleteACLsResults) error {
 func sanitizeBrokers(brokers []string) []string {
 	var clean []string
 	for _, b := range brokers {
-		for _, part := range strings.Split(b, ",") {
+		for part := range strings.SplitSeq(b, ",") {
 			part = strings.TrimSpace(part)
 			if idx := strings.Index(part, "://"); idx != -1 {
 				part = part[idx+3:]
