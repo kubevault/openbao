@@ -361,6 +361,7 @@ const sidebars: SidebarsConfig = {
                         "secrets/databases/rabbitmq",
                         "secrets/databases/solr",
                         "secrets/databases/valkey",
+                        "secrets/databases/weaviate",
                     ],
                     Identity: [
                         "secrets/identity/index",

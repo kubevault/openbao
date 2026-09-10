@@ -40,6 +40,7 @@ const sidebars: SidebarsConfig = {
             "secret/databases/rabbitmq",
             "secret/databases/solr",
             "secret/databases/valkey",
+            "secret/databases/weaviate",
           ],
           Identity: [
             "secret/identity/index",

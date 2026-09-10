@@ -46,6 +46,7 @@ import (
 	dbRabbitmq "github.com/openbao/openbao/v2/internal/builtin/database/rabbitmq"
 	dbSolr "github.com/openbao/openbao/v2/internal/builtin/database/solr"
 	dbValkey "github.com/openbao/openbao/v2/internal/builtin/database/valkey"
+	dbWeaviate "github.com/openbao/openbao/v2/internal/builtin/database/weaviate"
 )
 
 // PluginRunner holds the cache of long-lived plugin instances. Safe for
@@ -441,6 +442,8 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbRabbitmq.New
 	case "solr-database-plugin":
 		factory = dbSolr.New
+	case "weaviate-database-plugin":
+		factory = dbWeaviate.New
 	default:
 		return nil, fmt.Errorf("unknown plugin: %s", pluginName)
 	}
