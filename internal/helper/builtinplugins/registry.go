@@ -18,6 +18,7 @@ import (
 	credUserpass "github.com/openbao/openbao/v2/internal/builtin/credential/userpass"
 	dbCass "github.com/openbao/openbao/v2/internal/builtin/database/cassandra"
 	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
+	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
 	dbMongo "github.com/openbao/openbao/v2/internal/builtin/database/mongodb"
 	dbMSSQL "github.com/openbao/openbao/v2/internal/builtin/database/mssql"
@@ -86,6 +87,7 @@ func newRegistry() *registry {
 
 			"cassandra-database-plugin":     {Factory: dbCass.New},
 			"elasticsearch-database-plugin": {Factory: dbES.New},
+			"hana-database-plugin":          {Factory: dbHana.New},
 			"influxdb-database-plugin":      {Factory: dbInflux.New},
 			"mongodb-database-plugin":       {Factory: dbMongo.New},
 			"mssql-database-plugin":         {Factory: dbMSSQL.New},
@@ -96,6 +98,7 @@ func newRegistry() *registry {
 			"valkey-database-plugin":        {Factory: dbValkey.New},
 			"remote-cassandra-plugin":       {Factory: dbRemote.New("cassandra-database-plugin")},
 			"remote-elasticsearch-plugin":   {Factory: dbRemote.New("elasticsearch-database-plugin")},
+			"remote-hana-plugin":            {Factory: dbRemote.New("hana-database-plugin")},
 			"remote-influxdb-plugin":        {Factory: dbRemote.New("influxdb-database-plugin")},
 			"remote-mongodb-plugin":         {Factory: dbRemote.New("mongodb-database-plugin")},
 			"remote-mssql-plugin":           {Factory: dbRemote.New("mssql-database-plugin")},
