@@ -141,7 +141,14 @@ func TestQdrant_UpdateUser_Validation(t *testing.T) {
 		Username: "u",
 		Password: &dbplugin.ChangePassword{NewPassword: "n"},
 	})
-	require.NoError(t, err) // no-op success
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "qdrant does not support updating user credentials or static roles")
+
+	_, err = db.UpdateUser(context.Background(), dbplugin.UpdateUserRequest{
+		Username:   "u",
+		Expiration: &dbplugin.ChangeExpiration{NewExpiration: time.Now().Add(time.Hour)},
+	})
+	require.NoError(t, err)
 }
 
 func TestQdrant_ValueExists_Lifecycle(t *testing.T) {

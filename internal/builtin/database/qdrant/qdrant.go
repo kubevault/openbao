@@ -332,14 +332,17 @@ func (q *Qdrant) NewUser(ctx context.Context, req dbplugin.NewUserRequest) (dbpl
 	}, nil
 }
 
-// UpdateUser is a no-op against the server. Credential rotation flows
-// through this method and OpenBao keeps tracking the rotated value.
+// UpdateUser handles user updates. Qdrant generates dynamic JWT credentials
+// and does not support password updates or static credentials.
 func (q *Qdrant) UpdateUser(ctx context.Context, req dbplugin.UpdateUserRequest) (dbplugin.UpdateUserResponse, error) {
 	if req.Username == "" {
 		return dbplugin.UpdateUserResponse{}, errors.New("missing username")
 	}
 	if req.Password == nil && req.Expiration == nil {
 		return dbplugin.UpdateUserResponse{}, errors.New("no changes requested")
+	}
+	if req.Password != nil {
+		return dbplugin.UpdateUserResponse{}, errors.New("qdrant does not support updating user credentials or static roles")
 	}
 	return dbplugin.UpdateUserResponse{}, nil
 }

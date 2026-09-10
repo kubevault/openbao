@@ -20,7 +20,7 @@ Keys (HS256-signed JSON Web Tokens) and stateful token revocation via the
   `user_id`, parses creation statements into Qdrant collection access rules,
   and signs an HS256 JWT carrying the lease expiration (`exp`), permissions (`access`),
   and stateful validation claim (`value_exists`).
-- `UpdateUser` is a no-op against the server but tracks rotated credentials in OpenBao.
+- `UpdateUser` validates requests but rejects password updates and static credentials since Qdrant does not support password-based user accounts.
 - `DeleteUser` revokes the JWT immediately by deleting the validation point
   matching `user_id` from the validation collection in Qdrant.
 
