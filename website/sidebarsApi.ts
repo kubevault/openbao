@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
             "secret/databases/neo4j",
             "secret/databases/oracle",
             "secret/databases/postgresql",
+            "secret/databases/qdrant",
             "secret/databases/rabbitmq",
             "secret/databases/solr",
             "secret/databases/valkey",

@@ -42,6 +42,7 @@ import (
 	dbNeo4j "github.com/openbao/openbao/v2/internal/builtin/database/neo4j"
 	dbOracle "github.com/openbao/openbao/v2/internal/builtin/database/oracle"
 	dbPostgres "github.com/openbao/openbao/v2/internal/builtin/database/postgresql"
+	dbQdrant "github.com/openbao/openbao/v2/internal/builtin/database/qdrant"
 	dbRabbitmq "github.com/openbao/openbao/v2/internal/builtin/database/rabbitmq"
 	dbSolr "github.com/openbao/openbao/v2/internal/builtin/database/solr"
 	dbValkey "github.com/openbao/openbao/v2/internal/builtin/database/valkey"
@@ -434,6 +435,8 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbNeo4j.New
 	case "oracle-database-plugin":
 		factory = dbOracle.New
+	case "qdrant-database-plugin":
+		factory = dbQdrant.New
 	case "rabbitmq-database-plugin":
 		factory = dbRabbitmq.New
 	case "solr-database-plugin":
@@ -532,7 +535,13 @@ func (r *PluginRunner) handleNewUser(ctx context.Context, plugin dbplugin.Databa
 	if err != nil {
 		return "", fmt.Errorf("NewUser: %w", err)
 	}
-	out, err := json.Marshal(map[string]interface{}{"username": resp.Username})
+	payload := map[string]interface{}{
+		"username": resp.Username,
+	}
+	if resp.Password != "" {
+		payload["password"] = resp.Password
+	}
+	out, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
 	}

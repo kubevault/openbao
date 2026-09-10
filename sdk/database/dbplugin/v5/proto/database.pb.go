@@ -280,6 +280,7 @@ func (x *UsernameConfig) GetRoleName() string {
 type NewUserResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -317,6 +318,13 @@ func (*NewUserResponse) Descriptor() ([]byte, []int) {
 func (x *NewUserResponse) GetUsername() string {
 	if x != nil {
 		return x.Username
+	}
+	return ""
+}
+
+func (x *NewUserResponse) GetPassword() string {
+	if x != nil {
+		return x.Password
 	}
 	return ""
 }
@@ -841,9 +849,10 @@ const file_sdk_database_dbplugin_v5_proto_database_proto_rawDesc = "" +
 	"\asubject\x18\b \x01(\tR\asubject\"P\n" +
 	"\x0eUsernameConfig\x12!\n" +
 	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12\x1b\n" +
-	"\trole_name\x18\x02 \x01(\tR\broleName\"-\n" +
+	"\trole_name\x18\x02 \x01(\tR\broleName\"I\n" +
 	"\x0fNewUserResponse\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\"\x8d\x02\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x8d\x02\n" +
 	"\x11UpdateUserRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x127\n" +
 	"\bpassword\x18\x02 \x01(\v2\x1b.dbplugin.v5.ChangePasswordR\bpassword\x12=\n" +
