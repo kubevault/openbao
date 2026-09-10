@@ -30,6 +30,7 @@ import (
 	dbplugin "github.com/openbao/openbao/sdk/v2/database/dbplugin/v5"
 	dbCassandra "github.com/openbao/openbao/v2/internal/builtin/database/cassandra"
 	dbES "github.com/openbao/openbao/v2/internal/builtin/database/elasticsearch"
+	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
 	dbMongo "github.com/openbao/openbao/v2/internal/builtin/database/mongodb"
 	dbMSSQL "github.com/openbao/openbao/v2/internal/builtin/database/mssql"
@@ -410,16 +411,18 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbInflux.New
 	case "elasticsearch-database-plugin":
 		factory = dbES.New
+	case "hana-database-plugin":
+		factory = dbHana.New
 	case "mongodb-database-plugin":
 		factory = dbMongo.New
 	case "mssql-database-plugin":
 		factory = dbMSSQL.New
+	case "neo4j-database-plugin":
+		factory = dbNeo4j.New
 	case "oracle-database-plugin":
 		factory = dbOracle.New
 	case "rabbitmq-database-plugin":
 		factory = dbRabbitmq.New
-	case "neo4j-database-plugin":
-		factory = dbNeo4j.New
 	default:
 		return nil, fmt.Errorf("unknown plugin: %s", pluginName)
 	}
