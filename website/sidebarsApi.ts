@@ -33,6 +33,7 @@ const sidebars: SidebarsConfig = {
             "secret/databases/oracle",
             "secret/databases/postgresql",
             "secret/databases/rabbitmq",
+            "secret/databases/solr",
             "secret/databases/valkey",
           ],
           Identity: [

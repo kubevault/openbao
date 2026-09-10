@@ -39,6 +39,7 @@ import (
 	dbOracle "github.com/openbao/openbao/v2/internal/builtin/database/oracle"
 	dbPostgres "github.com/openbao/openbao/v2/internal/builtin/database/postgresql"
 	dbRabbitmq "github.com/openbao/openbao/v2/internal/builtin/database/rabbitmq"
+	dbSolr "github.com/openbao/openbao/v2/internal/builtin/database/solr"
 	dbValkey "github.com/openbao/openbao/v2/internal/builtin/database/valkey"
 )
 
@@ -423,6 +424,8 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbOracle.New
 	case "rabbitmq-database-plugin":
 		factory = dbRabbitmq.New
+	case "solr-database-plugin":
+		factory = dbSolr.New
 	default:
 		return nil, fmt.Errorf("unknown plugin: %s", pluginName)
 	}

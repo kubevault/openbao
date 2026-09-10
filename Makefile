@@ -227,6 +227,9 @@ spellcheck:
 	@echo "==> Spell checking website..."
 	go tool -modfile=tools/go.mod misspell -w -source=text website/content
 
+solr-database-plugin:
+	@CGO_ENABLED=0 go build -o bin/solr-database-plugin ./internal/builtin/database/solr/solr-database-plugin
+
 hana-database-plugin:
 	@CGO_ENABLED=0 go build -o bin/hana-database-plugin ./internal/builtin/database/hana/hana-database-plugin
 
@@ -245,7 +248,7 @@ mongodb-database-plugin:
 neo4j-database-plugin:
 	@CGO_ENABLED=0 go build -o bin/neo4j-database-plugin ./internal/builtin/database/neo4j/neo4j-database-plugin
 
-.PHONY: bin default prep test vet bootstrap fmt fmtcheck hana-database-plugin elasticsearch-database-plugin oracle-database-plugin mssql-database-plugin mongodb-database-plugin neo4j-database-plugin ember-dist ember-dist-dev static-dist static-dist-dev assetcheck check-openbao-in-path packages build build-ci semgrep semgrep-ci vet-godoctests ci-vet-godoctests
+.PHONY: bin default prep test vet bootstrap fmt fmtcheck solr-database-plugin hana-database-plugin elasticsearch-database-plugin oracle-database-plugin mssql-database-plugin mongodb-database-plugin neo4j-database-plugin ember-dist ember-dist-dev static-dist static-dist-dev assetcheck check-openbao-in-path packages build build-ci semgrep semgrep-ci vet-godoctests ci-vet-godoctests
 
 .NOTPARALLEL: ember-dist ember-dist-dev
 
