@@ -34,6 +34,7 @@ import (
 	dbHana "github.com/openbao/openbao/v2/internal/builtin/database/hana"
 	dbIgnite "github.com/openbao/openbao/v2/internal/builtin/database/ignite"
 	dbInflux "github.com/openbao/openbao/v2/internal/builtin/database/influxdb"
+	dbKafka "github.com/openbao/openbao/v2/internal/builtin/database/kafka"
 	dbMilvus "github.com/openbao/openbao/v2/internal/builtin/database/milvus"
 	dbMongo "github.com/openbao/openbao/v2/internal/builtin/database/mongodb"
 	dbMSSQL "github.com/openbao/openbao/v2/internal/builtin/database/mssql"
@@ -421,6 +422,8 @@ func loadPlugin(pluginName string) (dbplugin.Database, error) {
 		factory = dbHana.New
 	case "ignite-database-plugin":
 		factory = dbIgnite.New
+	case "kafka-database-plugin":
+		factory = dbKafka.New
 	case "milvus-database-plugin":
 		factory = dbMilvus.New
 	case "mongodb-database-plugin":
