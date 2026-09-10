@@ -27,6 +27,7 @@ require (
 	cloud.google.com/go/monitoring v1.29.0
 	github.com/ProtonMail/go-crypto v1.4.1
 	github.com/SAP/go-hdb v1.16.12
+	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
 	github.com/amsokol/ignite-go-client v0.12.2
 	github.com/armon/go-radix v1.0.0
 	github.com/caddyserver/certmagic v0.25.4
@@ -47,6 +48,7 @@ require (
 	github.com/google/cel-go v0.29.2
 	github.com/google/go-containerregistry v0.21.7
 	github.com/google/go-metrics-stackdriver v0.2.0
+	github.com/google/uuid v1.6.0
 	github.com/hashicorp/cap v0.13.0
 	github.com/hashicorp/cli v1.1.7
 	github.com/hashicorp/errwrap v1.1.0
@@ -256,7 +258,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.17 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/gophercloud/gophercloud v0.1.0 // indirect
